@@ -42,7 +42,7 @@
 <body class="flex h-screen overflow-hidden">
 
     <!-- Sidebar -->
-    <div class="w-72 bg-white border-r border-gray-200 flex flex-col p-6 shadow-2xl">
+    <div id="sidebar" class="w-72 bg-white border-r border-gray-200 flex flex-col p-6 shadow-2xl">
         <div class="text-3xl font-extrabold text-indigo-700 mb-10 flex items-center">
             <svg class="w-8 h-8 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v14a2 2 0 01-2 2H9zm0 0l-4 4m4-4l-4 4m0 0h12m-4-10l-4-4"></path></svg>
             <span class="truncate">Risk Gauge</span>
@@ -77,11 +77,11 @@
     <!-- Main Content Area -->
     <div class="main-content flex flex-col h-full overflow-y-auto">
         <!-- Top Navigation Bar -->
-        <header class="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10 p-4 md:p-6 flex justify-between items-center">
+        <header id="app-header" class="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10 p-4 md:p-6 flex justify-between items-center">
             <h1 id="page-title" class="text-2xl font-bold text-gray-800">Dashboard</h1>
-            <div class="flex items-center space-x-4">
-                <span class="text-sm text-gray-500 hidden sm:inline">Analyst Profile</span>
-                <div class="h-10 w-10 bg-indigo-500 rounded-full flex items-center justify-center text-white font-bold cursor-pointer shadow-md">JD</div>
+            <!-- Profile/Auth Area -->
+            <div id="auth-area" class="relative">
+                <!-- Content injected by renderHeader() -->
             </div>
         </header>
 
@@ -111,6 +111,28 @@
         let currentPage = 'Dashboard';
         let applicationHistory = []; // Dynamic array to store processed applications
         let batchFileData = null; // Stores data read from file upload, awaiting analysis button click
+        
+        // --- AUTHENTICATION STATE MANAGEMENT ---
+        let userState = {
+            isLoggedIn: false,
+            userName: 'Guest',
+            userInitials: 'G',
+            userEmail: '',
+            // Mock credentials for simple demo login
+            mockID: 'analyst123',
+            mockPass: 'securepass'
+        };
+
+        function loadUserState() {
+            const storedState = sessionStorage.getItem('riskGaugeUserState');
+            if (storedState) {
+                userState = JSON.parse(storedState);
+            }
+        }
+
+        function saveUserState() {
+            sessionStorage.setItem('riskGaugeUserState', JSON.stringify(userState));
+        }
 
         // Mock Firebase variables (required for environment setup)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-credit-risk-app-id';
@@ -261,6 +283,11 @@
 
         // --- NEW: Individual Evaluation Handler ---
         function handleIndividualEvaluation(clientData) {
+            if (!userState.isLoggedIn) {
+                showTemporaryMessage('Please log in to evaluate applications.', 'red');
+                renderPage('Login');
+                return;
+            }
             // Simulate processing latency
             showTemporaryMessage('Analyzing individual client...', 'blue');
             
@@ -346,9 +373,90 @@
             reader.readAsText(file);
         }
 
-        // --- Page Render Functions ---
+        // --- AUTHENTICATION FUNCTIONS ---
+        function handleLogin(event) {
+            event.preventDefault();
+            const form = event.target;
+            
+            const userID = form.elements['userID'].value.trim();
+            const password = form.elements['password'].value.trim();
+            const userName = form.elements['userName'].value.trim() || 'Analyst';
+            const userEmail = form.elements['userEmail'].value.trim() || 'analyst@risk.com';
+
+            // Mocked authentication check
+            if (userID === userState.mockID && password === userState.mockPass) {
+                userState.isLoggedIn = true;
+                userState.userName = userName;
+                userState.userEmail = userEmail;
+                userState.userInitials = userName.substring(0, 1).toUpperCase();
+                
+                saveUserState();
+                showTemporaryMessage(`Welcome back, ${userName}!`, 'green');
+                renderPage('Dashboard');
+            } else {
+                showTemporaryMessage('Invalid ID or Password. Try ID: analyst123, Pass: securepass', 'red');
+            }
+        }
+
+        function handleLogout() {
+            userState.isLoggedIn = false;
+            userState.userName = 'Guest';
+            userState.userInitials = 'G';
+            userState.userEmail = '';
+            saveUserState();
+            showTemporaryMessage('Logged out successfully.', 'blue');
+            renderPage('Login');
+        }
+
+
+        // --- UI RENDERING FUNCTIONS ---
+
+        function renderHeader() {
+            const authArea = document.getElementById('auth-area');
+            if (!authArea) return;
+
+            if (userState.isLoggedIn) {
+                const initials = userState.userInitials;
+                const name = userState.userName;
+
+                authArea.innerHTML = `
+                    <div class="flex items-center space-x-4">
+                        <span class="text-sm text-gray-500 hidden sm:inline">Hello, ${name}</span>
+                        <div id="profile-dropdown-btn" class="h-10 w-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold cursor-pointer shadow-lg hover:ring-2 hover:ring-indigo-400">
+                            ${initials}
+                        </div>
+                    </div>
+                    <!-- Dropdown Menu -->
+                    <div id="profile-dropdown-menu" class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl py-1 z-20 hidden">
+                        <div class="px-4 py-2 text-sm text-gray-700 border-b">
+                            <strong>${name}</strong><br>
+                            <span class="text-xs text-gray-500">${userState.userEmail}</span>
+                        </div>
+                        <a href="#" id="logout-btn" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3v-4a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                            Logout
+                        </a>
+                    </div>
+                `;
+                // Attach listeners
+                document.getElementById('profile-dropdown-btn').onclick = function() {
+                    const menu = document.getElementById('profile-dropdown-menu');
+                    menu.classList.toggle('hidden');
+                };
+                document.getElementById('logout-btn').onclick = handleLogout;
+            } else {
+                authArea.innerHTML = `
+                    <button onclick="renderPage('Login')" class="bg-indigo-600 text-white text-sm font-semibold px-4 py-2 rounded-full shadow-md hover:bg-indigo-700 transition duration-150">
+                        Login
+                    </button>
+                `;
+            }
+        }
+
 
         function renderDashboard() {
+            if (!userState.isLoggedIn) return renderPage('Login'); // Auth check
+
             const totalApps = applicationHistory.length;
             
             // Calculate Accepted, Reviewed, Rejected
@@ -360,7 +468,6 @@
             const totalChecksOut = (acceptedCount + rejectedCount + reviewedCount) === totalApps;
 
             // Calculate percentages
-            // FIX: Set percentage to 0 when totalApps is 0
             const acceptedPct = totalApps > 0 ? (acceptedCount / totalApps * 100).toFixed(0) : 0;
             const rejectedPct = totalApps > 0 ? (rejectedCount / totalApps * 100).toFixed(0) : 0;
             const reviewedPct = totalApps > 0 ? (reviewedCount / totalApps * 100).toFixed(0) : 0;
@@ -370,7 +477,6 @@
             const amberRiskCount = applicationHistory.filter(h => h.risk === 'Amber').length;
             const redRiskCount = rejectedCount; // Red risk corresponds to rejected applications
             
-            // FIX: Set RAG Pcts to 0 when totalApps is 0
             const lowPct = totalApps > 0 ? (lowRiskCount / totalApps * 100).toFixed(0) : 0;
             const amberPct = totalApps > 0 ? (amberRiskCount / totalApps * 100).toFixed(0) : 0;
             const redPct = totalApps > 0 ? (redRiskCount / totalApps * 100).toFixed(0) : 0; 
@@ -473,7 +579,9 @@
                     '</div>' +
                 '</div>';
         }
+
         function renderApplicationUpload() {
+            if (!userState.isLoggedIn) return renderPage('Login'); // Auth check
              // Helper function to create form input HTML
             const createInput = (label, id, value, type = 'number', step = '0.1') => {
                 const displayValue = SAMPLE_INPUT[id] !== undefined ? SAMPLE_INPUT[id] : value;
@@ -595,6 +703,7 @@
         }
 
         function renderEmptyEvaluation() {
+            if (!userState.isLoggedIn) return renderPage('Login'); // Auth check
             return '' +
                 '<div class="bg-white p-16 rounded-2xl shadow-xl border border-gray-100 text-center">' +
                     '<div class="text-indigo-500 mx-auto mb-6">' +
@@ -615,6 +724,7 @@
          * @param {object} result - The risk assessment result from the evaluation function.
          */
         function renderRiskEvaluation(result) {
+            if (!userState.isLoggedIn) return renderPage('Login'); // Auth check
             const riskLevel = result.final_evaluation; // Red, Amber, or Medium (Amber)
             const approvalPct = result.approval_prediction_pct;
             
@@ -739,6 +849,7 @@
         }
         
         function renderReports() {
+            if (!userState.isLoggedIn) return renderPage('Login'); // Auth check
             const history = applicationHistory.slice().reverse(); // Use dynamic history and reverse for newest first
             
             // FIX 1: Recalculate based on fixed statuses
@@ -824,9 +935,57 @@
                     '</div>' +
                 '</div>';
         }
-        
+
+        function renderLogin() {
+             return '' +
+                '<div class="flex items-center justify-center h-full">' +
+                    '<div class="bg-white p-10 rounded-2xl shadow-2xl w-full max-w-md">' +
+                        '<h2 class="text-3xl font-extrabold text-indigo-700 mb-2 text-center">Welcome</h2>' +
+                        '<p class="text-gray-500 mb-8 text-center">Sign in to access the Credit Risk Gauge.</p>' +
+                        
+                        '<form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">' +
+                            '<div class="flex flex-col">' +
+                                '<label for="userID" class="text-sm font-medium text-gray-700 mb-1">Analyst ID (e.g., analyst123)</label>' +
+                                '<input type="text" id="userID" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" required>' +
+                            '</div>' +
+                            '<div class="flex flex-col">' +
+                                '<label for="userName" class="text-sm font-medium text-gray-700 mb-1">Your Name</label>' +
+                                '<input type="text" id="userName" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" required>' +
+                            '</div>' +
+                            '<div class="flex flex-col">' +
+                                '<label for="userEmail" class="text-sm font-medium text-gray-700 mb-1">Email</label>' +
+                                '<input type="email" id="userEmail" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" required>' +
+                            '</div>' +
+                            '<div class="flex flex-col">' +
+                                '<label for="password" class="text-sm font-medium text-gray-700 mb-1">Password (e.g., securepass)</label>' +
+                                '<input type="password" id="password" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" required>' +
+                            '</div>' +
+                            
+                            '<button type="submit" class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700 transition duration-150 shadow-lg mt-6">' +
+                                'Login' +
+                            '</button>' +
+                        '</form>' +
+                        
+                        '<div class="text-center mt-4">' +
+                            '<a href="#" onclick="showTemporaryMessage(\'Mocked: Password reset email sent!\', \'blue\'); return false;" class="text-sm text-indigo-600 hover:text-indigo-800">Forgot Password / Reset</a>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+        }
+
         // Helper function to attach event listeners dynamically
         function setupDynamicListeners(pageName) {
+            // Hide sidebar on Login page
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.querySelector('.main-content');
+            if (pageName === 'Login') {
+                sidebar.classList.add('hidden');
+                mainContent.classList.add('w-full');
+            } else {
+                sidebar.classList.remove('hidden');
+                mainContent.classList.remove('w-full');
+            }
+            
             // Re-attach listeners for common buttons
             if (pageName === 'RiskEvaluation' && !currentRiskResult) {
                 const startBtn = document.getElementById('start-new-evaluation-btn');
@@ -892,10 +1051,20 @@
 
         // --- Utility Functions (simplified) ---
         function renderPage(pageName) {
+            
+            // Block access to core pages if not logged in
+            const restrictedPages = ['Dashboard', 'ApplicationUpload', 'RiskEvaluation', 'Reports', 'Settings'];
+            if (restrictedPages.includes(pageName) && !userState.isLoggedIn) {
+                pageName = 'Login';
+            }
+
             currentPage = pageName;
             const contentDiv = document.getElementById('app-content');
             const titleDiv = document.getElementById('page-title');
             const menuItems = document.querySelectorAll('.menu-item');
+
+            // Render Header (including auth status) before rendering content
+            renderHeader();
 
             // Update active menu item
             menuItems.forEach(item => {
@@ -925,6 +1094,9 @@
                 case 'Settings':
                     pageContent = '<div class="bg-white p-16 rounded-2xl shadow-xl text-center"><h2 class="text-2xl font-bold text-gray-800 mb-4">' + pageName + ' Page</h2><p class="text-gray-600">Content for the ' + pageName + ' section will be implemented here.</p></div>';
                     break;
+                case 'Login':
+                    pageContent = renderLogin();
+                    break;
             }
             contentDiv.innerHTML = pageContent;
             window.scrollTo(0, 0);
@@ -934,6 +1106,11 @@
         }
 
         function handleFormSubmission(event) {
+            if (!userState.isLoggedIn) {
+                showTemporaryMessage('Please log in to submit applications.', 'red');
+                renderPage('Login');
+                return;
+            }
             event.preventDefault();
             const form = event.target;
             const formData = {};
@@ -997,6 +1174,8 @@
 
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
+            loadUserState(); // Load state from session storage
+            
             // Attach click listeners to all menu items using data-page attribute
             document.querySelectorAll('.menu-item').forEach(item => {
                 item.addEventListener('click', (e) => {
@@ -1008,8 +1187,12 @@
                 });
             });
             
-            // Initial render
-            renderPage('Dashboard');
+            // Initial render based on auth status
+            if (userState.isLoggedIn) {
+                renderPage('Dashboard');
+            } else {
+                renderPage('Login');
+            }
         });
     </script>
 </body>
