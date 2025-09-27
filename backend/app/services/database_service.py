@@ -405,13 +405,32 @@ class DatabaseService:
         """Get current dashboard statistics"""
         session = get_session()
         try:
-            # Get the latest stats record or create default if none exists
+            # Get the latest stats record
             stats = session.query(DashboardStats).order_by(DashboardStats.last_updated.desc()).first()
-            
+
+            # Determine actual totals from client_data
+            actual_total = session.query(ClientData).count()
+
+            # Conditions under which we should rebuild stats from real data:
+            # 1. No stats row exists
+            # 2. Stats row is the original placeholder sample (150) but actual_total differs
+            # 3. Stats total does not match current client_data count (e.g., new uploads)
+            needs_refresh = False
             if not stats:
-                # Create default stats with some sample data
-                stats = self.create_default_dashboard_stats()
-            
+                needs_refresh = True
+            else:
+                placeholder_sample = stats.total_applications_processed == 150 and stats.updated_by == 'system_initialization'
+                if placeholder_sample and actual_total != 150:
+                    needs_refresh = True
+                elif stats.total_applications_processed != actual_total:
+                    # If there is a mismatch greater than zero clients we refresh to reflect reality
+                    needs_refresh = True
+
+            if needs_refresh:
+                # Build fresh stats from real data (uses existing helper)
+                refreshed = self.refresh_dashboard_stats_from_data()
+                return refreshed
+
             return stats.to_dict()
             
         except Exception as e:

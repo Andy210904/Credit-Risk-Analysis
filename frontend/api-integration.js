@@ -11,7 +11,8 @@ async function handleFileSelectionAPI(file, uploadBtn, fileNameDisplay) {
   const fileType = file.name.split(".").pop().toLowerCase();
   // Use passed parameters or fallback to DOM query
   if (!uploadBtn) uploadBtn = document.getElementById("analyze-batch-btn");
-  if (!fileNameDisplay) fileNameDisplay = document.getElementById("file-name-display");
+  if (!fileNameDisplay)
+    fileNameDisplay = document.getElementById("file-name-display");
 
   if (fileType !== "csv" && fileType !== "json") {
     showTemporaryMessage(
@@ -228,7 +229,7 @@ async function showClientDataFromBackend() {
 
   try {
     const clientsData = await getEntitiesFromBackend();
-    
+
     if (clientsData && clientsData.length > 0) {
       // Store the data globally for compatibility
       batchFileData = clientsData;
@@ -244,11 +245,13 @@ async function showClientDataFromBackend() {
         uploadBtn.textContent = `Show Data Preview (${clientsData.length} Clients)`;
       }
 
-      showTemporaryMessage(`${clientsData.length} clients loaded from backend.`, 'green');
-      
+      showTemporaryMessage(
+        `${clientsData.length} clients loaded from backend.`,
+        "green"
+      );
+
       // Re-render the page to show client data in preview table
-      renderPage('ApplicationUpload');
-      
+      renderPage("ApplicationUpload");
     } else {
       // No data found
       if (fileNameDisplay) {
@@ -258,12 +261,14 @@ async function showClientDataFromBackend() {
         uploadBtn.disabled = true;
         uploadBtn.textContent = "Show Data Preview (0 Clients)";
       }
-      showTemporaryMessage('No client data found. Please upload a CSV file first.', 'yellow');
+      showTemporaryMessage(
+        "No client data found. Please upload a CSV file first.",
+        "yellow"
+      );
     }
-    
   } catch (error) {
     console.error("Error loading client data from backend:", error);
-    
+
     if (fileNameDisplay) {
       fileNameDisplay.textContent = "Error loading data from backend";
     }
@@ -271,7 +276,7 @@ async function showClientDataFromBackend() {
       uploadBtn.disabled = true;
       uploadBtn.textContent = "Show Data Preview (Error)";
     }
-    showTemporaryMessage(`Error loading client data: ${error.message}`, 'red');
+    showTemporaryMessage(`Error loading client data: ${error.message}`, "red");
   }
 }
 
@@ -312,7 +317,9 @@ document.addEventListener("DOMContentLoaded", () => {
 // Dashboard Statistics API Functions
 async function getDashboardStatsFromBackend() {
   try {
-    const response = await fetch(`http://localhost:8000/api/frontend/dashboard-stats`);
+    const response = await fetch(
+      `http://localhost:8000/api/frontend/dashboard-stats`
+    );
     if (response.ok) {
       const data = await response.json();
       return data.dashboard_stats;
@@ -327,9 +334,12 @@ async function getDashboardStatsFromBackend() {
 
 async function initializeDashboardStats() {
   try {
-    const response = await fetch(`http://localhost:8000/api/frontend/dashboard-stats/initialize`, {
-      method: 'POST'
-    });
+    const response = await fetch(
+      `http://localhost:8000/api/frontend/dashboard-stats/initialize`,
+      {
+        method: "POST",
+      }
+    );
     if (response.ok) {
       const data = await response.json();
       return data.initialized_stats;
@@ -344,9 +354,12 @@ async function initializeDashboardStats() {
 
 async function refreshDashboardStats() {
   try {
-    const response = await fetch(`http://localhost:8000/api/frontend/dashboard-stats/refresh`, {
-      method: 'POST'
-    });
+    const response = await fetch(
+      `http://localhost:8000/api/frontend/dashboard-stats/refresh`,
+      {
+        method: "POST",
+      }
+    );
     if (response.ok) {
       const data = await response.json();
       return data.refreshed_stats;

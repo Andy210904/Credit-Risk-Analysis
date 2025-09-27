@@ -41,6 +41,7 @@ class ClientData(Base):
     fcf_usd_m = Column(Float)
     
     # Business information
+    
     sector = Column(String(100))
     country = Column(String(100))
     ownership_type = Column(String(50))

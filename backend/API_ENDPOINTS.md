@@ -3,12 +3,15 @@
 ## Entity Evaluation Endpoints (for Client Dashboard)
 
 ### 1. Get Client List
+
 ```
 GET /api/data/clients
 ```
+
 Returns a list of all available clients/entities for the evaluation dashboard.
 
 **Response:**
+
 ```json
 {
   "total_clients": 50,
@@ -27,17 +30,21 @@ Returns a list of all available clients/entities for the evaluation dashboard.
 ```
 
 ### 2. Evaluate Single Entity
+
 ```
 POST /api/data/entities/{entity_name}/evaluate
 ```
+
 Evaluates a specific client when the "Evaluate" button is clicked.
 
 **Example:**
+
 ```
 POST /api/data/entities/Apex Motors Ltd./evaluate
 ```
 
 **Response:**
+
 ```json
 {
   "entity_name": "Apex Motors Ltd.",
@@ -69,12 +76,15 @@ POST /api/data/entities/Apex Motors Ltd./evaluate
 ```
 
 ### 3. Bulk Evaluation
+
 ```
 POST /api/data/evaluate-multiple
 ```
+
 Evaluates multiple entities at once.
 
 **Request Body:**
+
 ```json
 ["Apex Motors Ltd.", "Nimbus Retail Pvt.", "Orion Technologies Inc."]
 ```
@@ -82,12 +92,15 @@ Evaluates multiple entities at once.
 ## ML Service Endpoints
 
 ### 1. Analyze Entity Credit Risk
+
 ```
 POST /api/ml/analyze-entity
 ```
+
 Direct ML service endpoint for entity credit analysis.
 
 **Request Body:**
+
 ```json
 {
   "entity_data": {
@@ -103,27 +116,35 @@ Direct ML service endpoint for entity credit analysis.
 ## Data Management Endpoints
 
 ### 1. Upload CSV
+
 ```
 POST /api/data/upload-csv
 ```
+
 Upload a CSV file containing entity data.
 
 ### 2. Analyze CSV Structure
+
 ```
 POST /api/data/analyze-csv
 ```
+
 Analyze CSV file structure without processing (for debugging).
 
 ### 3. Get All Entities
+
 ```
 GET /api/data/entities
 ```
+
 Get all entities from uploaded CSV.
 
 ### 4. Upload Status
+
 ```
 GET /api/data/upload-status
 ```
+
 Check if data has been uploaded and is ready for analysis.
 
 ## Usage Flow for Client Evaluation Dashboard
@@ -136,12 +157,14 @@ Check if data has been uploaded and is ready for analysis.
 ## Error Handling
 
 All endpoints return appropriate HTTP status codes:
+
 - `200`: Success
 - `400`: Bad Request (missing data, invalid format)
 - `404`: Entity not found
 - `500`: Internal server error
 
 Error responses include detailed messages:
+
 ```json
 {
   "detail": "Entity 'Unknown Company' not found in uploaded data"
