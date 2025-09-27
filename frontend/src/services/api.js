@@ -63,6 +63,46 @@ export const creditRiskService = {
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Failed to get LLM analysis');
     }
+  },
+
+  // Dashboard statistics
+  getDashboardStats: async () => {
+    try {
+      const response = await api.get('/api/v1/frontend/dashboard-stats');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to fetch dashboard statistics');
+    }
+  },
+
+  // Update dashboard statistics
+  updateDashboardStats: async (statsData) => {
+    try {
+      const response = await api.put('/api/v1/frontend/dashboard-stats', statsData);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to update dashboard statistics');
+    }
+  },
+
+  // Refresh dashboard statistics from actual data
+  refreshDashboardStats: async () => {
+    try {
+      const response = await api.post('/api/v1/frontend/dashboard-stats/refresh');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to refresh dashboard statistics');
+    }
+  },
+
+  // Initialize dashboard with sample data
+  initializeDashboardStats: async () => {
+    try {
+      const response = await api.post('/api/v1/frontend/dashboard-stats/initialize');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to initialize dashboard statistics');
+    }
   }
 };
 

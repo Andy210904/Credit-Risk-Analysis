@@ -8,6 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Load Chart.js Library -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <!-- Load API Integration Script -->
+    <script src="api-integration.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
         body {
@@ -264,7 +266,7 @@
             // Simulate processing latency
             showTemporaryMessage('Analyzing individual client...', 'blue');
             
-            setTimeout(() => {
+            setTimeout(async () => {
                 const result = evaluateRisk(clientData);
                 currentRiskResult = result;
                 
@@ -285,15 +287,16 @@
                 showTemporaryMessage('Evaluation Complete! See the Risk Evaluation page.', 'green');
                 
                 // Navigate to RiskEvaluation page for the result
-                renderPage('RiskEvaluation');
+                await renderPage('RiskEvaluation');
 
             }, 1000); 
         }
 
         // New function to handle file reading and storage
-        function handleFileSelection(file) {
+        async function handleFileSelection(file) {
             if (!file) return;
 
+            console.log('handleFileSelection called with:', file.name);
             const fileType = file.name.split('.').pop().toLowerCase();
             const uploadBtn = document.getElementById('analyze-batch-btn');
             const fileNameDisplay = document.getElementById('file-name-display');
@@ -302,6 +305,25 @@
                 showTemporaryMessage('Unsupported file type. Please use CSV or JSON.', 'red');
                 return;
             }
+            
+            // Use backend API for file upload
+            console.log('Checking handleFileSelectionAPI function:', typeof handleFileSelectionAPI);
+            if (typeof handleFileSelectionAPI === 'function') {
+                console.log('Using backend API for file upload');
+                // Call the backend API function from api-integration.js
+                handleFileSelectionAPI(file, uploadBtn, fileNameDisplay);
+            } else {
+                console.log('Backend API not available, using local processing');
+                // Fallback to local processing if API not available
+                await handleFileSelectionLocal(file);
+            }
+        }
+
+        // Local file handling as fallback
+        async function handleFileSelectionLocal(file) {
+            const fileType = file.name.split('.').pop().toLowerCase();
+            const uploadBtn = document.getElementById('analyze-batch-btn');
+            const fileNameDisplay = document.getElementById('file-name-display');
             
             // Disable analyze button until loading complete
             if (uploadBtn) uploadBtn.disabled = true;
@@ -348,32 +370,85 @@
 
         // --- Page Render Functions ---
 
-        function renderDashboard() {
+        // Global variable to store backend dashboard stats
+        let backendDashboardStats = null;
+
+        async function loadDashboardStatsFromBackend() {
+            // Check if backend API is available
+            if (typeof getDashboardStatsFromBackend === 'function') {
+                try {
+                    const stats = await getDashboardStatsFromBackend();
+                    if (stats) {
+                        backendDashboardStats = stats;
+                        return stats;
+                    }
+                } catch (error) {
+                    console.error('Error loading dashboard stats from backend:', error);
+                }
+            }
+            
+            // Fallback to local calculation if backend fails
+            return calculateLocalDashboardStats();
+        }
+
+        function calculateLocalDashboardStats() {
             const totalApps = applicationHistory.length;
             
             // Calculate Accepted, Reviewed, Rejected
             const acceptedCount = applicationHistory.filter(h => h.status === 'Accepted').length;
             const reviewedCount = applicationHistory.filter(h => h.status === 'Under Review').length;
             const rejectedCount = applicationHistory.filter(h => h.status === 'Rejected').length;
-            
-            // Total Checks Out
-            const totalChecksOut = (acceptedCount + rejectedCount + reviewedCount) === totalApps;
 
             // Calculate percentages
-            // FIX: Set percentage to 0 when totalApps is 0
-            const acceptedPct = totalApps > 0 ? (acceptedCount / totalApps * 100).toFixed(0) : 0;
-            const rejectedPct = totalApps > 0 ? (rejectedCount / totalApps * 100).toFixed(0) : 0;
-            const reviewedPct = totalApps > 0 ? (reviewedCount / totalApps * 100).toFixed(0) : 0;
+            const acceptedPct = totalApps > 0 ? (acceptedCount / totalApps * 100).toFixed(1) : 0;
+            const rejectedPct = totalApps > 0 ? (rejectedCount / totalApps * 100).toFixed(1) : 0;
+            const reviewedPct = totalApps > 0 ? (reviewedCount / totalApps * 100).toFixed(1) : 0;
 
             // Distribution percentages (RAG)
             const lowRiskCount = applicationHistory.filter(h => h.risk === 'Low').length;
             const amberRiskCount = applicationHistory.filter(h => h.risk === 'Amber').length;
-            const redRiskCount = rejectedCount; // Red risk corresponds to rejected applications
+            const redRiskCount = rejectedCount;
             
-            // FIX: Set RAG Pcts to 0 when totalApps is 0
-            const lowPct = totalApps > 0 ? (lowRiskCount / totalApps * 100).toFixed(0) : 0;
-            const amberPct = totalApps > 0 ? (amberRiskCount / totalApps * 100).toFixed(0) : 0;
-            const redPct = totalApps > 0 ? (redRiskCount / totalApps * 100).toFixed(0) : 0; 
+            const lowPct = totalApps > 0 ? (lowRiskCount / totalApps * 100).toFixed(1) : 0;
+            const amberPct = totalApps > 0 ? (amberRiskCount / totalApps * 100).toFixed(1) : 0;
+            const redPct = totalApps > 0 ? (redRiskCount / totalApps * 100).toFixed(1) : 0;
+
+            return {
+                total_applications_processed: totalApps,
+                total_accepted: acceptedCount,
+                under_review_manual: reviewedCount,
+                total_rejected: rejectedCount,
+                accepted_percentage: parseFloat(acceptedPct),
+                under_review_percentage: parseFloat(reviewedPct),
+                rejected_percentage: parseFloat(rejectedPct),
+                low_risk_count: lowRiskCount,
+                moderate_risk_count: amberRiskCount,
+                high_risk_count: redRiskCount,
+                low_risk_percentage: parseFloat(lowPct),
+                moderate_risk_percentage: parseFloat(amberPct),
+                high_risk_percentage: parseFloat(redPct),
+                status_check: 'OK',
+                last_updated: new Date().toISOString()
+            };
+        }
+
+        async function renderDashboard() {
+            // Load dashboard stats from backend or calculate locally
+            const stats = await loadDashboardStatsFromBackend();
+            
+            const totalApps = stats.total_applications_processed;
+            const acceptedCount = stats.total_accepted;
+            const reviewedCount = stats.under_review_manual;
+            const rejectedCount = stats.total_rejected;
+            const acceptedPct = stats.accepted_percentage;
+            const reviewedPct = stats.under_review_percentage;
+            const rejectedPct = stats.rejected_percentage;
+            const lowPct = stats.low_risk_percentage;
+            const amberPct = stats.moderate_risk_percentage;
+            const redPct = stats.high_risk_percentage;
+            
+            // Total Checks Out
+            const totalChecksOut = (acceptedCount + rejectedCount + reviewedCount) === totalApps; 
 
             // Initialize Chart data immediately
             setTimeout(() => {
@@ -415,13 +490,26 @@
 
             return '' +
                 '<div class="space-y-8">' +
-                    '<h2 class="text-3xl font-extrabold text-gray-800">Credit Risk Analyzer: Executive Dashboard</h2>' +
+                    '<div class="flex justify-between items-center">' +
+                        '<h2 class="text-3xl font-extrabold text-gray-800">Credit Risk Analyzer: Executive Dashboard</h2>' +
+                        '<div class="flex space-x-3">' +
+                            '<button onclick="refreshDashboardData()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition duration-150 shadow-md flex items-center">' +
+                                '<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+                                    '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>' +
+                                '</svg>' +
+                                'Refresh Data' +
+                            '</button>' +
+                            '<span class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg">' +
+                                (backendDashboardStats ? '🟢 Backend Data' : '🟡 Local Data') +
+                            '</span>' +
+                        '</div>' +
+                    '</div>' +
                     '<div class="grid grid-cols-1 md:grid-cols-4 gap-6">' +
                         '<!-- Card 1: Total Processed (Col 1) -->' +
                         '<div class="bg-white p-6 rounded-2xl shadow-xl border-t-4 border-indigo-500">' +
                             '<h3 class="text-base font-semibold text-gray-500 mb-2">Total Applications Processed</h3>' +
                             '<p class="text-5xl font-extrabold text-gray-900">' + totalApps + '</p>' +
-                            '<p class="text-sm text-indigo-600 mt-1">Status Check: ' + (totalChecksOut ? 'OK' : 'Error') + '</p>' +
+                            '<p class="text-sm text-indigo-600 mt-1">Status Check: ' + (stats.status_check || 'OK') + '</p>' +
                         '</div>' +
                         '<!-- Card 2: Total Accepted (Col 2) -->' +
                         '<div class="bg-white p-6 rounded-2xl shadow-xl border-t-4 border-green-500">' +
@@ -471,6 +559,16 @@
                             '</div>' +
                         '</div>' +
                     '</div>' +
+                    
+                    // Last updated info
+                    (stats.last_updated ? 
+                        '<div class="bg-white p-4 rounded-xl shadow-md border border-gray-100">' +
+                            '<div class="flex justify-between items-center text-sm text-gray-600">' +
+                                '<span>Last Updated: ' + new Date(stats.last_updated).toLocaleString() + '</span>' +
+                                '<span>Data Source: ' + (backendDashboardStats ? 'SQLite Database' : 'Local Calculations') + '</span>' +
+                            '</div>' +
+                        '</div>' : ''
+                    ) +
                 '</div>';
         }
         function renderApplicationUpload() {
@@ -831,18 +929,18 @@
             if (pageName === 'RiskEvaluation' && !currentRiskResult) {
                 const startBtn = document.getElementById('start-new-evaluation-btn');
                 if (startBtn) {
-                    startBtn.addEventListener('click', (e) => {
+                    startBtn.addEventListener('click', async (e) => {
                         e.preventDefault();
-                        renderPage('ApplicationUpload');
+                        await renderPage('ApplicationUpload');
                     });
                 }
             }
             if (pageName === 'Reports') {
                 const startBtnReport = document.getElementById('start-new-evaluation-btn-report');
                 if (startBtnReport) {
-                     startBtnReport.addEventListener('click', (e) => {
+                     startBtnReport.addEventListener('click', async (e) => {
                         e.preventDefault();
-                        renderPage('ApplicationUpload');
+                        await renderPage('ApplicationUpload');
                     });
                 }
             }
@@ -872,11 +970,22 @@
                 if (analyzeBatchBtn) {
                     analyzeBatchBtn.addEventListener('click', (e) => {
                         e.preventDefault();
-                        if (batchFileData) {
-                            // Pass the button element to update its state during processing
-                            // NOTE: analyzeBatchBtn now triggers the PREVIEW, not the evaluation
+                        
+                        console.log('Show Data Preview button clicked');
+                        console.log('showClientDataFromBackend function available:', typeof showClientDataFromBackend);
+                        console.log('batchFileData available:', !!batchFileData);
+                        
+                        // Check if backend API is available
+                        if (typeof showClientDataFromBackend === 'function') {
+                            console.log('Using backend API to fetch client data');
+                            // Use backend API to fetch and display client data
+                            showClientDataFromBackend();
+                        } else if (batchFileData) {
+                            console.log('Using local data display');
+                            // Fallback to local data display
                             renderPage('ApplicationUpload');
                         } else {
+                            console.log('No file data available');
                             showTemporaryMessage('Please select a file first.', 'red');
                         }
                     });
@@ -891,7 +1000,7 @@
         }
 
         // --- Utility Functions (simplified) ---
-        function renderPage(pageName) {
+        async function renderPage(pageName) {
             currentPage = pageName;
             const contentDiv = document.getElementById('app-content');
             const titleDiv = document.getElementById('page-title');
@@ -911,7 +1020,7 @@
             let pageContent;
             switch (pageName) {
                 case 'Dashboard':
-                    pageContent = renderDashboard();
+                    pageContent = await renderDashboard();
                     break;
                 case 'ApplicationUpload':
                     pageContent = renderApplicationUpload();
@@ -933,7 +1042,7 @@
             setupDynamicListeners(pageName);
         }
 
-        function handleFormSubmission(event) {
+        async function handleFormSubmission(event) {
             event.preventDefault();
             const form = event.target;
             const formData = {};
@@ -947,7 +1056,7 @@
             submitButton.innerHTML = '<svg class="animate-spin w-5 h-5 mr-2 text-white" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-dasharray="80" stroke-dashoffset="60" style="stroke-opacity: 0.25;"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Analyzing...';
             submitButton.disabled = true;
 
-            setTimeout(() => {
+            setTimeout(async () => {
                 try {
                     // Use the captured form data for evaluation
                     const result = evaluateRisk(formData);
@@ -969,10 +1078,14 @@
                     });
 
                     showTemporaryMessage('Risk Analysis Complete! Check the Evaluation page.', 'green');
-                    renderPage('RiskEvaluation');
+                    await renderPage('RiskEvaluation');
                 } catch (error) {
                     console.error('Evaluation Error:', error);
                     showTemporaryMessage('Evaluation failed. Check console for details.', 'red');
+                } finally {
+                    // Reset button state
+                    submitButton.innerHTML = '<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>Run Risk Evaluation';
+                    submitButton.disabled = false;
                 }
             }, 1500); // Simulate API latency
         }
@@ -995,18 +1108,88 @@
             }, 3000);
         }
 
+        // Make showTemporaryMessage globally available for API integration
+        window.showTemporaryMessage = showTemporaryMessage;
+
+        // Dashboard refresh functionality
+        async function refreshDashboardData() {
+            showTemporaryMessage('Refreshing dashboard data...', 'blue');
+            
+            try {
+                // Try to refresh from backend first
+                if (typeof refreshDashboardStats === 'function') {
+                    const refreshedStats = await refreshDashboardStats();
+                    if (refreshedStats) {
+                        backendDashboardStats = refreshedStats;
+                        showTemporaryMessage('Dashboard data refreshed from backend!', 'green');
+                    } else {
+                        throw new Error('Backend refresh failed');
+                    }
+                } else {
+                    // Fallback to reinitializing if available
+                    if (typeof initializeDashboardStats === 'function') {
+                        const initializedStats = await initializeDashboardStats();
+                        if (initializedStats) {
+                            backendDashboardStats = initializedStats;
+                            showTemporaryMessage('Dashboard data initialized from backend!', 'green');
+                        } else {
+                            throw new Error('Backend initialization failed');
+                        }
+                    } else {
+                        throw new Error('Backend functions not available');
+                    }
+                }
+                
+                // Re-render the dashboard with new data
+                await renderPage('Dashboard');
+                
+            } catch (error) {
+                console.error('Error refreshing dashboard:', error);
+                showTemporaryMessage('Using local data calculations', 'yellow');
+                
+                // Re-render with local data
+                backendDashboardStats = null;
+                await renderPage('Dashboard');
+            }
+        }
+
+        // Initialize dashboard data on first load
+        async function initializeDashboardIfNeeded() {
+            if (!backendDashboardStats && typeof initializeDashboardStats === 'function') {
+                try {
+                    const stats = await initializeDashboardStats();
+                    if (stats) {
+                        backendDashboardStats = stats;
+                        console.log('Dashboard initialized with backend data');
+                    }
+                } catch (error) {
+                    console.error('Error initializing dashboard:', error);
+                }
+            }
+        }
+
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
+            // Check if API integration is loaded
+            console.log('DOMContentLoaded - Checking API functions:');
+            console.log('handleFileSelectionAPI available:', typeof handleFileSelectionAPI);
+            console.log('showClientDataFromBackend available:', typeof showClientDataFromBackend);
+            console.log('testBackendConnection available:', typeof testBackendConnection);
+            console.log('getDashboardStatsFromBackend available:', typeof getDashboardStatsFromBackend);
+            
             // Attach click listeners to all menu items using data-page attribute
             document.querySelectorAll('.menu-item').forEach(item => {
-                item.addEventListener('click', (e) => {
+                item.addEventListener('click', async (e) => {
                     e.preventDefault();
                     const page = item.getAttribute('data-page');
                     if (page) {
-                        renderPage(page);
+                        await renderPage(page);
                     }
                 });
             });
+            
+            // Initialize dashboard data if backend is available
+            initializeDashboardIfNeeded();
             
             // Initial render
             renderPage('Dashboard');
