@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Credit Risk Evaluation</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Credit Risk Evaluation</h1>
+        <p class="subtitle">Upload a JSON file to get an evaluation from a rule-based model and a Gemini LLM.</p>
+
+        <!-- Upload Form -->
+        <form method="post" action="/upload_json" enctype="multipart/form-data" class="form-card">
+            <div class="form-group">
+                <label for="file">Upload JSON File</label>
+                <input type="file" name="file" id="file" accept=".json" required>
+            </div>
+            <button type="submit" class="btn">📂 Upload & Predict</button>
+        </form>
+
+        <!-- Error Message -->
+        {% if error_message %}
+        <div class="result-card" style="border-color: red; margin-top: 20px;">
+            <h2>🚨 Error</h2>
+            <p style="color: red;">{{ error_message }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Submitted JSON -->
+        {% if submitted_json %}
+        <div class="result-card">
+            <h2>📄 Submitted JSON</h2>
+            <pre>{{ submitted_json }}</pre>
+        </div>
+        {% endif %}
+
+        <!-- Results Grid -->
+        <div class="results-grid">
+            <!-- Rule-Based Model -->
+            <div class="result-card">
+                <h2>⚙️ Rule-Based Model (.pkl)</h2>
+                {% if table_result_rule %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Factor</th>
+                            <th>Evaluation</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in table_result_rule %}
+                        <tr>
+                            <td>{{ row.factor }}</td>
+                            <td>{{ row.evaluation }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <p><b>Summary:</b> {{ summary_rule }}</p>
+                <p><b>Final Evaluation:</b> {{ final_evaluation_rule }}</p>
+                {% elif submitted_json %}
+                <p style="color: gray;">⚠️ Rule-based results could not be generated.</p>
+                {% endif %}
+            </div>
+
+            <!-- Gemini LLM Evaluation -->
+            <div class="result-card">
+                <h2>🤖 Gemini LLM Evaluation</h2>
+                {% if llm_final_rating %}
+                    <p><b>Final Risk Rating:</b> {{ llm_final_rating }}</p>
+                    <h4>Factor Breakdown:</h4>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Factor</th>
+                                <th>Evaluation</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for factor, eval in llm_factor_breakdown.items() %}
+                            <tr>
+                                <td>{{ factor }}</td>
+                                <td>{{ eval }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    <p><b>Summary:</b> {{ summary_llm }}</p>
+                {% elif submitted_json %}
+                    <p style="color: red;">
+                        <b>⚠️ Evaluation Failed:</b><br>{{ summary_llm }}
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>
