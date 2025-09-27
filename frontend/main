@@ -120,13 +120,19 @@
             userEmail: '',
             // Mock credentials for simple demo login
             mockID: 'analyst123',
-            mockPass: 'securepass'
+            mockPass: 'securepass',
+            mockUsers: {
+                'analyst123': { pass: 'securepass', name: 'John Doe', email: 'john.doe@risk.com' }
+            }
         };
 
         function loadUserState() {
             const storedState = sessionStorage.getItem('riskGaugeUserState');
             if (storedState) {
                 userState = JSON.parse(storedState);
+                if (!userState.mockUsers) {
+                    userState.mockUsers = { 'analyst123': { pass: 'securepass', name: 'John Doe', email: 'john.doe@risk.com' } };
+                }
             }
         }
 
@@ -181,78 +187,58 @@
         ];
 
 
-        // --- Mock Risk Evaluation Function (Simulating AI/ML Engine) ---
-        function evaluateRisk(inputData) {
-            // This structure will hold factor evaluations and reasons
-            const factors = [];
-            let highRiskCount = 0;
-            let lowRiskCount = 0;
+        // --- Mock ML Model Response (Simulates Backend ML Endpoint) ---
+        function sendRequestToMLModel(inputData) {
+            // This structure mimics a real fetch() POST request to a backend ML service
+            return new Promise((resolve) => {
+                
+                // --- MOCK ML LOGIC START ---
+                // Based on simple mock internal rules (you will replace this with your real ML model output logic)
+                
+                const debtRatio = inputData.debt_to_equity || 1.0;
+                const coverage = inputData.interest_coverage || 2.0;
+                const ebitda = inputData.ebitda_margin_pct || 15.0;
+                
+                let finalScore = 65; // Default Amber
+                let finalEval = 'Amber';
+                let summary = "The model suggests Moderate Risk. Performance metrics are solid but leverage remains a concern. Requires manual review.";
 
-            // Simple mock logic based on inputData
-            for (const key of essentialFields) {
-                const value = inputData[key];
-                const rule = MOCK_THRESHOLDS[key];
-                let evaluation = 'Medium';
-
-                if (rule) {
-                    let isGood = false;
-                    let isBad = false;
-                    
-                    if (rule.compare === '>') { // e.g., EBITDA > 20
-                        if (value > rule.low) isGood = true;
-                        if (value < rule.high) isBad = true;
-                    } else if (rule.compare === '<') { // e.g., Debt/Equity < 0.5
-                        if (value < rule.low) isGood = true;
-                        if (value > rule.high) isBad = true;
-                    }
-
-                    if (isGood) {
-                        evaluation = 'Low'; // Very good
-                        lowRiskCount++;
-                    } else if (isBad) {
-                        evaluation = 'High'; // High risk
-                        highRiskCount++;
-                    }
+                if (debtRatio < 0.6 && coverage > 4.0) {
+                    finalScore = Math.floor(Math.random() * (99 - 85)) + 85; // Low Risk
+                    finalEval = 'Low';
+                    summary = "The application presents **Low Risk (Green)**. Strong capital structure and excellent coverage metrics indicate a high likelihood of timely repayment. Fast-track approval recommended.";
+                } else if (debtRatio > 1.5 || ebitda < 5.0) {
+                    finalScore = Math.floor(Math.random() * (45 - 10)) + 10; // High Risk
+                    finalEval = 'Red';
+                    summary = "The application presents **High Risk (Red)**. Significant leverage and low profitability breach critical thresholds. Rejection is strongly recommended.";
+                } else {
+                     finalScore = Math.floor(Math.random() * (79 - 55)) + 55; // Amber Risk
+                     finalEval = 'Amber';
                 }
                 
-                factors.push({ 
-                    factor: key, 
-                    evaluation: evaluation, 
-                    value: value,
-                });
-            }
+                // Map factors to match your original output requirements (using internal rules)
+                const factors = Object.keys(inputData).map(key => ({
+                    factor: key,
+                    // Simple mock evaluation based on ML output
+                    evaluation: (Math.random() > 0.8) ? 'Low' : (Math.random() > 0.6) ? 'High' : 'Medium',
+                    value: inputData[key]
+                }));
+                // --- MOCK ML LOGIC END ---
 
-            // Determine final risk and prediction based on mock factors
-            let FINAL_EVALUATION = 'Low';
-            let approvalPredictionPct = 85;
-
-            if (highRiskCount >= 2 || highRiskCount > lowRiskCount) {
-                FINAL_EVALUATION = 'Red';
-                approvalPredictionPct = Math.floor(Math.random() * (RAG_THRESHOLDS.RED_MAX - 10)) + 10;
-            } else if (highRiskCount === 1 || factors.filter(f => f.evaluation === 'Medium').length > 5) {
-                FINAL_EVALUATION = 'Amber';
-                approvalPredictionPct = Math.floor(Math.random() * (RAG_THRESHOLDS.AMBER_MAX - RAG_THRESHOLDS.RED_MAX)) + RAG_THRESHOLDS.RED_MAX + 5;
-            } else {
-                 FINAL_EVALUATION = 'Low';
-                 approvalPredictionPct = Math.floor(Math.random() * (RAG_THRESHOLDS.GREEN_MAX - RAG_THRESHOLDS.AMBER_MAX)) + RAG_THRESHOLDS.AMBER_MAX + 5;
-            }
-
-            const summary = FINAL_EVALUATION === 'Red'
-                ? "The application presents **High Risk (Red)** primarily due to multiple non-compliant factors. This significantly increases the likelihood of default, and **rejection is strongly recommended**."
-                : FINAL_EVALUATION === 'Amber'
-                ? "The application presents **Moderate Risk (Amber)**. While profitability is solid, one or more key factors are borderline. **Manual review and additional due diligence** is the recommended action."
-                : "The application presents **Low Risk (Green)**. Key financial ratios are strong, collateral is excellent, and governance is high. This application qualifies for a **fast-track approval process**."
-
-
-            return {
-                factors: factors,
-                summary: summary,
-                final_evaluation: FINAL_EVALUATION,
-                approval_prediction_pct: approvalPredictionPct,
-                applicant_id: inputData.entity_id || ('CUS-' + (Math.floor(Math.random() * 90000) + 10000)),
-                input_data: inputData // Pass original input for display
-            };
+                // Simulate network latency
+                setTimeout(() => {
+                    resolve({
+                        factors: factors,
+                        summary: summary,
+                        final_evaluation: finalEval,
+                        approval_prediction_pct: finalScore,
+                        applicant_id: inputData.entity_id || ('CUS-' + (Math.floor(Math.random() * 90000) + 10000)),
+                        input_data: inputData
+                    });
+                }, 1000); // 1 second mock response time
+            });
         }
+
 
         // Helper function for CSV parsing
         function parseCSV(csvText) {
@@ -269,7 +255,7 @@
                     headers.forEach((header, index) => {
                         let value = values[index];
                         // Convert numeric fields based on expected keys
-                        if (!isNaN(parseFloat(value)) && essentialFields.includes(header)) {
+                        if (!isNaN(parseFloat(value))) {
                              client[header] = parseFloat(value);
                         } else {
                             client[header] = value;
@@ -282,17 +268,17 @@
         }
 
         // --- NEW: Individual Evaluation Handler ---
-        function handleIndividualEvaluation(clientData) {
+        async function handleIndividualEvaluation(clientData) {
             if (!userState.isLoggedIn) {
                 showTemporaryMessage('Please log in to evaluate applications.', 'red');
                 renderPage('Login');
                 return;
             }
-            // Simulate processing latency
-            showTemporaryMessage('Analyzing individual client...', 'blue');
+            // Use the client data and send it to the mock ML model
+            showTemporaryMessage('Sending individual request to ML model...', 'blue');
             
-            setTimeout(() => {
-                const result = evaluateRisk(clientData);
+            try {
+                const result = await sendRequestToMLModel(clientData);
                 currentRiskResult = result;
                 
                 // Determine final status
@@ -309,12 +295,15 @@
                     color: result.final_evaluation === 'Low' ? 'green' : result.final_evaluation === 'Amber' ? 'yellow' : 'red'
                 });
 
-                showTemporaryMessage('Evaluation Complete! See the Risk Evaluation page.', 'green');
+                showTemporaryMessage('ML Analysis Complete! See the Risk Evaluation page.', 'green');
                 
                 // Navigate to RiskEvaluation page for the result
                 renderPage('RiskEvaluation');
 
-            }, 1000); 
+            } catch (error) {
+                console.error('ML Model Error:', error);
+                showTemporaryMessage('ML Model failed to return a result.', 'red');
+            }
         }
 
         // New function to handle file reading and storage
@@ -380,23 +369,49 @@
             
             const userID = form.elements['userID'].value.trim();
             const password = form.elements['password'].value.trim();
-            const userName = form.elements['userName'].value.trim() || 'Analyst';
-            const userEmail = form.elements['userEmail'].value.trim() || 'analyst@risk.com';
-
+            
             // Mocked authentication check
-            if (userID === userState.mockID && password === userState.mockPass) {
+            if (userState.mockUsers[userID] && userState.mockUsers[userID].pass === password) {
+                // Set session user details from the stored mock user data
                 userState.isLoggedIn = true;
-                userState.userName = userName;
-                userState.userEmail = userEmail;
-                userState.userInitials = userName.substring(0, 1).toUpperCase();
+                userState.userName = userState.mockUsers[userID].name;
+                userState.userEmail = userState.mockUsers[userID].email;
+                userState.userInitials = userState.userName.substring(0, 1).toUpperCase();
                 
                 saveUserState();
-                showTemporaryMessage(`Welcome back, ${userName}!`, 'green');
+                showTemporaryMessage(`Welcome back, ${userState.userName}!`, 'green');
                 renderPage('Dashboard');
             } else {
-                showTemporaryMessage('Invalid ID or Password. Try ID: analyst123, Pass: securepass', 'red');
+                showTemporaryMessage('Invalid Analyst ID or Password. Check credentials.', 'red');
             }
         }
+        
+        function handleRegister(event) {
+            event.preventDefault();
+            const form = event.target;
+            
+            const userID = form.elements['newUserID'].value.trim();
+            const password = form.elements['newPassword'].value.trim();
+            const userName = form.elements['newUserName'].value.trim() || 'New Analyst';
+            const userEmail = form.elements['newUserEmail'].value.trim() || 'newuser@risk.com';
+
+            if (userState.mockUsers[userID]) {
+                 showTemporaryMessage('User ID already exists. Please choose another.', 'red');
+                 return;
+            }
+
+            // Mocked registration (saving to session state)
+            userState.mockUsers[userID] = { pass: password, name: userName, email: userEmail };
+            userState.isLoggedIn = true;
+            userState.userName = userName;
+            userState.userEmail = userEmail;
+            userState.userInitials = userName.substring(0, 1).toUpperCase();
+            
+            saveUserState();
+            showTemporaryMessage(`Account created! Welcome, ${userName}!`, 'green');
+            renderPage('Dashboard');
+        }
+
 
         function handleLogout() {
             userState.isLoggedIn = false;
@@ -552,7 +567,7 @@
                     '<!-- Main Visualization Area -->' +
                     '<div class="bg-white p-8 rounded-2xl shadow-xl border border-gray-100">' +
                         '<div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">' +
-                            '<!-- Chart Area -->' +
+                            '<!-- Chart Area (Doughnut Chart) -->' +
                             '<div class="h-64 flex justify-center">' +
                                 '<canvas id="riskDistributionChart" class="w-full"></canvas>' +
                             '</div>' +
@@ -601,6 +616,7 @@
             }).join('');
 
             // Determine initial state of analyze button
+            const batchCount = batchFileData ? batchFileData.length : 0;
             const initialAnalyzeBtnText = batchFileData ? `Show Data Preview (${batchFileData.length} Clients)` : 'Show Data Preview (0 Clients)';
             const isAnalyzeDisabled = !batchFileData || batchFileData.length === 0;
 
@@ -705,16 +721,18 @@
         function renderEmptyEvaluation() {
             if (!userState.isLoggedIn) return renderPage('Login'); // Auth check
             return '' +
-                '<div class="bg-white p-16 rounded-2xl shadow-xl border border-gray-100 text-center">' +
-                    '<div class="text-indigo-500 mx-auto mb-6">' +
-                        '<svg class="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0h12a2 2 0 002-2v-6a2 2 0 00-2-2H9m0 0V9a2 2 0 012-2h2a2 2 0 012 2v3m0 0v3m0-3h3m-3 0h-3m12 0a2 2 0 002-2v-6a2 2 0 00-2-2h-2m-4 6v-4a1 1 0 011-1h2a1 1 0 011 1v4"></path></svg>' +
+                '<div class="flex items-center justify-center min-h-[50vh]">' +
+                    '<div class="bg-white p-16 rounded-2xl shadow-xl border border-gray-100 text-center">' +
+                        '<div class="text-indigo-500 mx-auto mb-6">' +
+                            '<svg class="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0h12a2 2 0 002-2v-6a2 2 0 00-2-2H9m0 0V9a2 2 0 012-2h2a2 2 0 012 2v3m0 0v3m0-3h3m-3 0h-3m12 0a2 2 0 002-2v-6a2 2 0 00-2-2h-2m-4 6v-4a1 1 0 011-1h2a1 1 0 011 1v4"></path></svg>' +
+                        '</div>' +
+                        '<h2 class="text-2xl font-bold text-gray-800 mb-2">Evaluation Pending</h2>' +
+                        '<p class="text-gray-600 mb-8">Please submit an application via the "New Application" page to view a real-time risk assessment here.</p>' +
+                        '<!-- Added ID for event listener attachment -->' +
+                        '<button id="start-new-evaluation-btn" class="bg-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition duration-150 shadow-lg">' +
+                            'Start New Evaluation' +
+                        '</button>' +
                     '</div>' +
-                    '<h2 class="text-2xl font-bold text-gray-800 mb-2">Evaluation Pending</h2>' +
-                    '<p class="text-gray-600 mb-8">Please submit an application via the "New Application" page to view a real-time risk assessment here.</p>' +
-                    '<!-- Added ID for event listener attachment -->' +
-                    '<button id="start-new-evaluation-btn" class="bg-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition duration-150 shadow-lg">' +
-                        'Start New Evaluation' +
-                    '</button>' +
                 '</div>';
         }
 
@@ -733,7 +751,9 @@
 
             // Calculate rotation for the needle (0% -> 0deg, 100% -> 180deg)
             rotationDeg = (approvalPct / 100) * 180;
-            if (rotationDeg > 180) rotationDeg = 180;
+            // Ensure rotation stays within 0 to 180 degrees
+            rotationDeg = Math.min(180, Math.max(0, rotationDeg));
+
 
             if (approvalPct > RAG_THRESHOLDS.AMBER_MAX) { 
                 colorClass = 'text-green-600 bg-green-100';
@@ -796,10 +816,11 @@
                                     '<!-- Red (High Risk) 0%-50% -->' +
                                     '<path d="M 5 50 A 45 45 0 0 1 95 50" fill="none" stroke="#ef4444" stroke-width="10" stroke-dasharray="78.5 283" stroke-dashoffset="-66.13" />' +
 
-                                    '<!-- Needle (The line element with dynamic rotation) -->' +
-                                    '<line class="gauge-needle" x1="50" y1="50" x2="50" y2="50" stroke="#1f2937" stroke-width="2" stroke-linecap="round" ' +
-                                        'style="transform: rotate(' + rotationDeg + 'deg);"/>' +
-                                    '<circle cx="50" cy="50" r="3" fill="#1f2937" />' +
+                                    // FIX: Use a Polygon for a prominent arrow/needle shape
+                                    '<polygon class="gauge-needle" points="50,50 48,15 52,15" ' +
+                                        'style="transform: rotate(' + rotationDeg + 'deg); transition: transform 1.5s ease-in-out; fill: #1f2937;" />' +
+                                    // Central Pivot Point (Circle)
+                                    '<circle cx="50" cy="50" r="4" fill="#1f2937" />' +
                                 '</svg>' +
                             '</div>' +
 
@@ -940,26 +961,25 @@
              return '' +
                 '<div class="flex items-center justify-center h-full">' +
                     '<div class="bg-white p-10 rounded-2xl shadow-2xl w-full max-w-md">' +
-                        '<h2 class="text-3xl font-extrabold text-indigo-700 mb-2 text-center">Welcome</h2>' +
+                        '<h2 class="text-3xl font-extrabold text-indigo-700 mb-2 text-center">Analyst Login</h2>' +
                         '<p class="text-gray-500 mb-8 text-center">Sign in to access the Credit Risk Gauge.</p>' +
                         
                         '<form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">' +
+                            '<!-- Analyst ID -->' +
                             '<div class="flex flex-col">' +
-                                '<label for="userID" class="text-sm font-medium text-gray-700 mb-1">Analyst ID (e.g., analyst123)</label>' +
+                                '<label for="userID" class="text-sm font-medium text-gray-700 mb-1">Analyst ID </label>' +
                                 '<input type="text" id="userID" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" required>' +
                             '</div>' +
+                            
+                            '<!-- Password -->' +
                             '<div class="flex flex-col">' +
-                                '<label for="userName" class="text-sm font-medium text-gray-700 mb-1">Your Name</label>' +
-                                '<input type="text" id="userName" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" required>' +
-                            '</div>' +
-                            '<div class="flex flex-col">' +
-                                '<label for="userEmail" class="text-sm font-medium text-gray-700 mb-1">Email</label>' +
-                                '<input type="email" id="userEmail" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" required>' +
-                            '</div>' +
-                            '<div class="flex flex-col">' +
-                                '<label for="password" class="text-sm font-medium text-gray-700 mb-1">Password (e.g., securepass)</label>' +
+                                '<label for="password" class="text-sm font-medium text-gray-700 mb-1">Password </label>' +
                                 '<input type="password" id="password" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" required>' +
                             '</div>' +
+                            
+                            '<!-- HIDDEN FIELDS (Name and Email are retrieved from registered user data) -->' +
+                            '<input type="hidden" id="userName" value="Analyst">' + 
+                            '<input type="hidden" id="userEmail" value="analyst@risk.com">' +
                             
                             '<button type="submit" class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700 transition duration-150 shadow-lg mt-6">' +
                                 'Login' +
@@ -967,7 +987,44 @@
                         '</form>' +
                         
                         '<div class="text-center mt-4">' +
-                            '<a href="#" onclick="showTemporaryMessage(\'Mocked: Password reset email sent!\', \'blue\'); return false;" class="text-sm text-indigo-600 hover:text-indigo-800">Forgot Password / Reset</a>' +
+                            '<a href="#" onclick="renderPage(\'Register\'); return false;" class="text-sm text-indigo-600 hover:text-indigo-800">Need an account? Register Here</a>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+        }
+        
+        function renderRegister() {
+             return '' +
+                '<div class="flex items-center justify-center h-full">' +
+                    '<div class="bg-white p-10 rounded-2xl shadow-2xl w-full max-w-md">' +
+                        '<h2 class="text-3xl font-extrabold text-indigo-700 mb-2 text-center">Analyst Registration</h2>' +
+                        '<p class="text-gray-500 mb-8 text-center">Create a new account to access the system.</p>' +
+                        
+                        '<form id="register-form" onsubmit="handleRegister(event)" class="space-y-4">' +
+                            '<div class="flex flex-col">' +
+                                '<label for="newUserID" class="text-sm font-medium text-gray-700 mb-1">Choose Analyst ID</label>' +
+                                '<input type="text" id="newUserID" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" required>' +
+                            '</div>' +
+                            '<div class="flex flex-col">' +
+                                '<label for="newUserName" class="text-sm font-medium text-gray-700 mb-1">Your Full Name</label>' +
+                                '<input type="text" id="newUserName" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" required>' +
+                            '</div>' +
+                            '<div class="flex flex-col">' +
+                                '<label for="newUserEmail" class="text-sm font-medium text-gray-700 mb-1">Email</label>' +
+                                '<input type="email" id="newUserEmail" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" required>' +
+                            '</div>' +
+                            '<div class="flex flex-col">' +
+                                '<label for="newPassword" class="text-sm font-medium text-gray-700 mb-1">Choose Password</label>' +
+                                '<input type="password" id="newPassword" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" required>' +
+                            '</div>' +
+                            
+                            '<button type="submit" class="w-full bg-green-600 text-white font-semibold py-3 rounded-lg hover:bg-green-700 transition duration-150 shadow-lg mt-6">' +
+                                'Register Account' +
+                            '</button>' +
+                        '</form>' +
+                        
+                        '<div class="text-center mt-4">' +
+                            '<a href="#" onclick="renderPage(\'Login\'); return false;" class="text-sm text-indigo-600 hover:text-indigo-800">Already have an account? Log In</a>' +
                         '</div>' +
                     '</div>' +
                 '</div>';
@@ -975,10 +1032,12 @@
 
         // Helper function to attach event listeners dynamically
         function setupDynamicListeners(pageName) {
-            // Hide sidebar on Login page
+            // Hide sidebar on Login/Register page
             const sidebar = document.getElementById('sidebar');
             const mainContent = document.querySelector('.main-content');
-            if (pageName === 'Login') {
+            const authPages = ['Login', 'Register'];
+            
+            if (authPages.includes(pageName)) {
                 sidebar.classList.add('hidden');
                 mainContent.classList.add('w-full');
             } else {
@@ -1005,12 +1064,21 @@
                     });
                 }
             }
+            
+            // Attach form handlers to the newly rendered forms
+            if (pageName === 'Login') {
+                document.getElementById('login-form').onsubmit = handleLogin;
+            }
+             if (pageName === 'Register') {
+                document.getElementById('register-form').onsubmit = handleRegister;
+            }
 
             // --- BATCH PROCESSING LISTENERS ---
             if (pageName === 'ApplicationUpload') {
                 const fileSelectBtn = document.getElementById('file-select-btn');
                 const fileInput = document.getElementById('file-input');
                 const analyzeBatchBtn = document.getElementById('analyze-batch-btn');
+                const dropArea = document.getElementById('drop-area');
                 
                 if (fileSelectBtn && fileInput) {
                     // Clicking "Or Select File" triggers file dialog
@@ -1025,6 +1093,23 @@
                             handleFileSelection(e.target.files[0]);
                         }
                     };
+                }
+                
+                // Drop area listeners
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    dropArea.addEventListener(eventName, preventDefaults, false);
+                });
+                dropArea.addEventListener('drop', handleDrop, false);
+                function preventDefaults(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                function handleDrop(e) {
+                    let dt = e.dataTransfer;
+                    let files = dt.files;
+                    if (files.length > 0) {
+                        handleFileSelection(files[0]);
+                    }
                 }
                 
                 // Clicking "Analyze Batch" button triggers processing
@@ -1055,7 +1140,10 @@
             // Block access to core pages if not logged in
             const restrictedPages = ['Dashboard', 'ApplicationUpload', 'RiskEvaluation', 'Reports', 'Settings'];
             if (restrictedPages.includes(pageName) && !userState.isLoggedIn) {
-                pageName = 'Login';
+                // If attempting to access a restricted page, always redirect to Login
+                if (pageName !== 'Register' && pageName !== 'Login') {
+                    pageName = 'Login';
+                }
             }
 
             currentPage = pageName;
@@ -1071,7 +1159,8 @@
                 item.classList.remove('active');
             });
             const activeItem = Array.from(menuItems).find(item => item.getAttribute('data-page') === pageName);
-            if (activeItem) {
+            // Only highlight menu item if it's not Login or Register
+            if (activeItem && !['Login', 'Register'].includes(pageName)) {
                 activeItem.classList.add('active');
             }
 
@@ -1097,6 +1186,9 @@
                 case 'Login':
                     pageContent = renderLogin();
                     break;
+                case 'Register':
+                    pageContent = renderRegister();
+                    break;
             }
             contentDiv.innerHTML = pageContent;
             window.scrollTo(0, 0);
@@ -1105,7 +1197,7 @@
             setupDynamicListeners(pageName);
         }
 
-        function handleFormSubmission(event) {
+        async function handleFormSubmission(event) {
             if (!userState.isLoggedIn) {
                 showTemporaryMessage('Please log in to submit applications.', 'red');
                 renderPage('Login');
@@ -1124,34 +1216,34 @@
             submitButton.innerHTML = '<svg class="animate-spin w-5 h-5 mr-2 text-white" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-dasharray="80" stroke-dashoffset="60" style="stroke-opacity: 0.25;"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Analyzing...';
             submitButton.disabled = true;
 
-            setTimeout(() => {
-                try {
-                    // Use the captured form data for evaluation
-                    const result = evaluateRisk(formData);
-                    currentRiskResult = result;
-                    
-                    // Determine final status
-                    // FIX 2: Amber is now 'Under Review'
-                    const status = result.final_evaluation === 'Red' ? 'Rejected' : 
-                                   result.final_evaluation === 'Amber' ? 'Under Review' : 'Accepted';
-                    
-                    // Save result to history
-                    applicationHistory.push({
-                        id: result.applicant_id,
-                        date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
-                        risk: result.final_evaluation,
-                        score: result.approval_prediction_pct,
-                        status: status,
-                        color: result.final_evaluation === 'Low' ? 'green' : result.final_evaluation === 'Amber' ? 'yellow' : 'red'
-                    });
+            try {
+                // Call the simulated ML model API
+                const result = await sendRequestToMLModel(formData);
+                currentRiskResult = result;
+                
+                // Determine final status
+                const status = result.final_evaluation === 'Red' ? 'Rejected' : 
+                               result.final_evaluation === 'Amber' ? 'Under Review' : 'Accepted';
+                
+                // Save result to history
+                applicationHistory.push({
+                    id: result.applicant_id,
+                    date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+                    risk: result.final_evaluation,
+                    score: result.approval_prediction_pct,
+                    status: status,
+                    color: result.final_evaluation === 'Low' ? 'green' : result.final_evaluation === 'Amber' ? 'yellow' : 'red'
+                });
 
-                    showTemporaryMessage('Risk Analysis Complete! Check the Evaluation page.', 'green');
-                    renderPage('RiskEvaluation');
-                } catch (error) {
-                    console.error('Evaluation Error:', error);
-                    showTemporaryMessage('Evaluation failed. Check console for details.', 'red');
-                }
-            }, 1500); // Simulate API latency
+                showTemporaryMessage('ML Analysis Complete! Check the Evaluation page.', 'green');
+                renderPage('RiskEvaluation');
+            } catch (error) {
+                console.error('Evaluation Error:', error);
+                showTemporaryMessage('Evaluation failed. Check console for details.', 'red');
+            } finally {
+                submitButton.innerHTML = '<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg> Run Risk Evaluation';
+                submitButton.disabled = false;
+            }
         }
 
         function showTemporaryMessage(message, type) {
