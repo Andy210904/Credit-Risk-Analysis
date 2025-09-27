@@ -108,6 +108,7 @@
         let currentRiskResult = null;
         let currentPage = 'Dashboard';
         let applicationHistory = []; // Dynamic array to store processed applications
+        let batchFileData = null; // Stores data read from file upload, awaiting analysis button click
 
         // Mock Firebase variables (required for environment setup)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-credit-risk-app-id';
@@ -208,7 +209,7 @@
             const summary = FINAL_EVALUATION === 'Red'
                 ? "The application presents **High Risk (Red)** primarily due to multiple non-compliant factors. This significantly increases the likelihood of default, and **rejection is strongly recommended**."
                 : FINAL_EVALUATION === 'Amber'
-                ? "The application presents **Moderate Risk (Amber)**. While profitability is solid, one or more key factors are borderline. **Conditional approval requiring additional collateral or detailed due diligence** is the recommended action."
+                ? "The application presents **Moderate Risk (Amber)**. While profitability is solid, one or more key factors are borderline. **Manual review and additional due diligence** is the recommended action."
                 : "The application presents **Low Risk (Green)**. Key financial ratios are strong, collateral is excellent, and governance is high. This application qualifies for a **fast-track approval process**."
 
 
@@ -250,67 +251,79 @@
         }
 
         // Function to run mock evaluation on the entire batch
-        function processBatch(clientsData) {
+        function processBatch(clientsData, uploadBtn) {
             if (clientsData.length === 0) {
                 showTemporaryMessage('Batch file contained no valid client data.', 'red');
+                if (uploadBtn) {
+                    uploadBtn.disabled = false;
+                    uploadBtn.textContent = 'Analyze Batch (0 Clients)';
+                }
                 return;
             }
 
             let firstResult = null;
             let newApplications = 0;
             
-            clientsData.forEach(clientInput => {
-                const result = evaluateRisk(clientInput);
-                
-                if (!firstResult) {
-                    firstResult = result; // Keep the first result for the single-client view
-                }
-                
-                // Determine final status
-                const status = result.final_evaluation === 'Red' ? 'Rejected' : 
-                               result.final_evaluation === 'Amber' ? 'Approved w/ conditions' : 'Accepted';
-                
-                // Save result to history
-                applicationHistory.push({
-                    id: result.applicant_id,
-                    date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
-                    risk: result.final_evaluation,
-                    score: result.approval_prediction_pct,
-                    status: status,
-                    color: result.final_evaluation === 'Low' ? 'green' : result.final_evaluation === 'Amber' ? 'yellow' : 'red'
-                });
-                newApplications++;
-            });
-
-            // Update the single view (RiskEvaluation) with the first client's result
-            if (firstResult) {
-                currentRiskResult = firstResult;
+            // Disable the button and show processing status
+            if (uploadBtn) {
+                uploadBtn.disabled = true;
+                uploadBtn.innerHTML = '<svg class="animate-spin w-5 h-5 mr-2 text-white" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-dasharray="80" stroke-dashoffset="60" style="stroke-opacity: 0.25;"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Analyzing ' + clientsData.length + ' Clients...';
             }
 
-            showTemporaryMessage(`Batch analysis complete: ${newApplications} applications processed. Navigating to Reports.`, 'green');
-            
-            // Navigate to Reports to view the full batch log
-            renderPage('Reports');
+            setTimeout(() => {
+                clientsData.forEach(clientInput => {
+                    const result = evaluateRisk(clientInput);
+                    
+                    if (!firstResult) {
+                        firstResult = result; // Keep the first result for the single-client view
+                    }
+                    
+                    // Determine final status
+                    // FIX 2: Amber is now 'Under Review'
+                    const status = result.final_evaluation === 'Red' ? 'Rejected' : 
+                                   result.final_evaluation === 'Amber' ? 'Under Review' : 'Accepted';
+                    
+                    // Save result to history
+                    applicationHistory.push({
+                        id: result.applicant_id,
+                        date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+                        risk: result.final_evaluation,
+                        score: result.approval_prediction_pct,
+                        status: status,
+                        color: result.final_evaluation === 'Low' ? 'green' : result.final_evaluation === 'Amber' ? 'yellow' : 'red'
+                    });
+                    newApplications++;
+                });
+
+                // Update the single view (RiskEvaluation) with the first client's result
+                if (firstResult) {
+                    currentRiskResult = firstResult;
+                }
+
+                showTemporaryMessage(`Batch analysis complete: ${newApplications} applications processed. Navigating to Reports.`, 'green');
+                
+                // Navigate to Reports to view the full batch log
+                renderPage('Reports');
+
+            }, 2500); // Simulate API latency
         }
 
-        // New function to handle file reading and evaluation
-        function handleFileEvaluation(file) {
+        // New function to handle file reading and storage
+        function handleFileSelection(file) {
             if (!file) return;
 
             const fileType = file.name.split('.').pop().toLowerCase();
-            const uploadBtn = document.getElementById('file-select-btn');
+            const uploadBtn = document.getElementById('analyze-batch-btn');
+            const fileNameDisplay = document.getElementById('file-name-display');
 
             if (fileType !== 'csv' && fileType !== 'json') {
                 showTemporaryMessage('Unsupported file type. Please use CSV or JSON.', 'red');
                 return;
             }
-
-            if (uploadBtn) {
-                uploadBtn.disabled = true;
-                uploadBtn.textContent = 'Parsing & Analyzing...';
-            }
-            // Add a slight delay for better UX with the message
-            setTimeout(() => { showTemporaryMessage('Starting batch analysis for ' + file.name + '...', 'green'); }, 100);
+            
+            // Disable analyze button until loading complete
+            if (uploadBtn) uploadBtn.disabled = true;
+            if (fileNameDisplay) fileNameDisplay.textContent = 'Reading file...';
 
             const reader = new FileReader();
             reader.onload = function(e) {
@@ -323,23 +336,24 @@
                     } else if (fileType === 'csv') {
                         clientsData = parseCSV(contents);
                     }
-                } catch (error) {
-                    showTemporaryMessage('Error parsing ' + fileType.toUpperCase() + ' file.', 'red');
-                    if (uploadBtn) {
-                        uploadBtn.disabled = false;
-                        uploadBtn.textContent = 'Or Click to Select File';
-                    }
-                    return;
-                }
-                
-                // Simulate API call processing time
-                setTimeout(() => {
-                    processBatch(clientsData);
                     
+                    batchFileData = clientsData;
+                    if (fileNameDisplay) fileNameDisplay.textContent = `${file.name} (${clientsData.length} clients)`;
                     if (uploadBtn) {
-                        // Reset button text only if we stay on this page, but we navigate away, so no need to reset here.
+                        uploadBtn.disabled = clientsData.length === 0;
+                        uploadBtn.textContent = `Analyze Batch (${clientsData.length} Clients)`;
                     }
-                }, 1500);
+                    showTemporaryMessage(`File loaded: ${clientsData.length} applications ready for analysis.`, 'blue');
+
+                } catch (error) {
+                    batchFileData = null;
+                    if (fileNameDisplay) fileNameDisplay.textContent = 'Error during file parsing.';
+                    if (uploadBtn) {
+                        uploadBtn.disabled = true;
+                        uploadBtn.textContent = 'Analyze Batch (0 Clients)';
+                    }
+                    showTemporaryMessage('Error parsing ' + fileType.toUpperCase() + ' file.', 'red');
+                }
             };
             reader.readAsText(file);
         }
@@ -348,40 +362,55 @@
 
         function renderDashboard() {
             const totalApps = applicationHistory.length;
-            const acceptedCount = applicationHistory.filter(h => h.status.includes('Accepted') || h.status.includes('Approved')).length;
-            const rejectedCount = totalApps - acceptedCount;
             
-            // Calculate mock distribution percentages based on current history
+            // FIX 1: Calculate Accepted and Rejected based on new status definitions
+            const acceptedCount = applicationHistory.filter(h => h.status === 'Accepted').length;
+            const reviewedCount = applicationHistory.filter(h => h.status === 'Under Review').length;
+            const rejectedCount = applicationHistory.filter(h => h.status === 'Rejected').length;
+            
+            // Total Accepted + Rejected + Under Review should now equal Total Apps
+            const totalChecksOut = (acceptedCount + rejectedCount + reviewedCount) === totalApps;
+
+            // Calculate percentages
+            const acceptedPct = totalApps > 0 ? (acceptedCount / totalApps * 100).toFixed(0) : 0;
+            const rejectedPct = totalApps > 0 ? (rejectedCount / totalApps * 100).toFixed(0) : 0;
+            const reviewedPct = totalApps > 0 ? (reviewedCount / totalApps * 100).toFixed(0) : 0;
+
+            // Distribution percentages (RAG)
             const lowRiskCount = applicationHistory.filter(h => h.risk === 'Low').length;
             const amberRiskCount = applicationHistory.filter(h => h.risk === 'Amber').length;
-            const redRiskCount = applicationHistory.filter(h => h.risk === 'Red').length;
-
+            
             const lowPct = totalApps > 0 ? (lowRiskCount / totalApps * 100).toFixed(0) : 65;
             const amberPct = totalApps > 0 ? (amberRiskCount / totalApps * 100).toFixed(0) : 20;
-            const redPct = totalApps > 0 ? (redRiskCount / totalApps * 100).toFixed(0) : 15;
-
+            const redPct = totalApps > 0 ? (rejectedCount / totalApps * 100).toFixed(0) : 15; 
 
             return '' +
                 '<div class="space-y-8">' +
                     '<h2 class="text-3xl font-extrabold text-gray-800">Credit Risk Analyzer: Executive Dashboard</h2>' +
-                    '<div class="grid grid-cols-1 md:grid-cols-3 gap-6">' +
-                        '<!-- Card 1: Total Processed -->' +
+                    '<div class="grid grid-cols-1 md:grid-cols-4 gap-6">' +
+                        '<!-- Card 1: Total Processed (Col 1) -->' +
                         '<div class="bg-white p-6 rounded-2xl shadow-xl border-t-4 border-indigo-500">' +
                             '<h3 class="text-base font-semibold text-gray-500 mb-2">Total Applications Processed</h3>' +
                             '<p class="text-5xl font-extrabold text-gray-900">' + totalApps + '</p>' +
-                            '<p class="text-sm text-indigo-600 mt-1">Dynamically updated on submission</p>' +
+                            '<p class="text-sm text-indigo-600 mt-1">Status Check: ' + (totalChecksOut ? 'OK' : 'Error') + '</p>' +
                         '</div>' +
-                        '<!-- Card 2: Total Accepted -->' +
+                        '<!-- Card 2: Total Accepted (Col 2) -->' +
                         '<div class="bg-white p-6 rounded-2xl shadow-xl border-t-4 border-green-500">' +
                             '<h3 class="text-base font-semibold text-gray-500 mb-2">Total Accepted</h3>' +
                             '<p class="text-5xl font-extrabold text-green-700">' + acceptedCount + '</p>' +
-                            '<p class="text-sm text-green-600 mt-1">' + lowPct + '% of total portfolio</p>' +
+                            '<p class="text-sm text-green-600 mt-1">' + acceptedPct + '% of total portfolio</p>' +
                         '</div>' +
-                        '<!-- Card 3: Total Rejected -->' +
+                        '<!-- Card 3: Under Review (New Card, Col 3) -->' +
+                        '<div class="bg-white p-6 rounded-2xl shadow-xl border-t-4 border-yellow-500">' +
+                            '<h3 class="text-base font-semibold text-gray-500 mb-2">Under Review (Manual)</h3>' +
+                            '<p class="text-5xl font-extrabold text-yellow-700">' + reviewedCount + '</p>' +
+                            '<p class="text-sm text-yellow-600 mt-1">' + reviewedPct + '% of total portfolio</p>' +
+                        '</div>' +
+                        '<!-- Card 4: Total Rejected (Col 4) -->' +
                         '<div class="bg-white p-6 rounded-2xl shadow-xl border-t-4 border-red-500">' +
                             '<h3 class="text-base font-semibold text-gray-500 mb-2">Total Rejected</h3>' +
                             '<p class="text-5xl font-extrabold text-red-700">' + rejectedCount + '</p>' +
-                            '<p class="text-sm text-red-600 mt-1">' + redPct + '% of total portfolio</p>' +
+                            '<p class="text-sm text-red-600 mt-1">' + rejectedPct + '% of total portfolio</p>' +
                         '</div>' +
                     '</div>' +
                     
@@ -412,7 +441,6 @@
                     '</div>' +
                 '</div>';
         }
-
         function renderApplicationUpload() {
              // Helper function to create form input HTML
             const createInput = (label, id, value, type = 'number', step = '0.1') => {
@@ -432,6 +460,10 @@
                 return createInput(label, key, value, 'number', step);
             }).join('');
 
+            // Determine initial state of analyze button
+            const initialAnalyzeBtnText = batchFileData ? `Analyze Batch (${batchFileData.length} Clients)` : 'Analyze Batch (0 Clients)';
+            const isAnalyzeDisabled = !batchFileData || batchFileData.length === 0;
+
 
             return '' +
                 '<div class="space-y-8">' +
@@ -442,11 +474,15 @@
                             '<h2 class="text-xl font-bold text-gray-800 mb-4">Batch Upload (.csv or .json)</h2>' +
                             '<div id="drop-area" class="border-2 border-dashed border-indigo-300 bg-indigo-50 rounded-xl p-8 text-center transition duration-200 hover:border-indigo-500 cursor-pointer">' +
                                 '<svg class="w-10 h-10 mx-auto text-indigo-500 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5.002 5.002 0 0113.974 4C14.048 4.046 14.12 4 14.2 4a5 5 0 014.59 7.424m-8.563 4.34a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L10 14.586l7.293-7.293a1 1 0 011.414 1.414l-8 8a1 1 0 01-1.414 0z"></path></svg>' +
-                                '<p class="text-gray-600 font-medium">Drag & drop files here</p>' +
+                                '<p id="file-name-display" class="text-gray-600 font-medium">' + (batchFileData ? batchFileData[0].file : 'Drag & drop files here') + '</p>' +
                                 '<input type="file" id="file-input" class="hidden" accept=".csv, .json">' +
                             '</div>' +
-                            '<button id="file-select-btn" class="mt-6 w-full bg-gray-200 text-gray-800 px-4 py-3 rounded-xl font-semibold hover:bg-gray-300 transition duration-150 shadow-md">' +
-                                'Or Click to Select File' +
+                            // FIX 3: Button now explicitly triggers analysis (if file is loaded)
+                            '<button id="analyze-batch-btn" ' + (isAnalyzeDisabled ? 'disabled' : '') + ' class="mt-6 w-full bg-indigo-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition duration-150 shadow-lg disabled:bg-indigo-300">' +
+                                initialAnalyzeBtnText +
+                            '</button>' +
+                            '<button id="file-select-btn" class="mt-3 w-full bg-gray-200 text-gray-800 px-4 py-3 rounded-xl font-semibold hover:bg-gray-300 transition duration-150 shadow-md">' +
+                                'Or Select File' +
                             '</button>' +
                         '</div>' +
 
@@ -586,7 +622,8 @@
                                     result.summary +
                                 '</p>' +
                                 '<div class="mt-4 text-sm font-medium text-gray-600">' +
-                                    '<span class="text-indigo-600">Decision:</span> ' + (riskLevel === 'Red' ? 'Reject & Escalate.' : riskLevel === 'Amber' ? 'Conditional Approval (Require Additional Collateral).' : 'Fast-Track Approval.') +
+                                    // FIX 2: Updated decision text for Amber risk
+                                    '<span class="text-indigo-600">Decision:</span> ' + (riskLevel === 'Red' ? 'Reject & Escalate.' : riskLevel === 'Amber' ? 'Requires Manual Review (Under Review).' : 'Fast-Track Approval.') +
                                 '</div>' +
                             '</div>' +
                         '</div>' +
@@ -615,8 +652,10 @@
         function renderReports() {
             const history = applicationHistory.slice().reverse(); // Use dynamic history and reverse for newest first
             
-            const acceptedCount = history.filter(h => h.status.includes('Accepted') || h.status.includes('Approved')).length;
-            const rejectedCount = history.length - acceptedCount;
+            // FIX 1: Recalculate based on fixed statuses
+            const acceptedCount = history.filter(h => h.status === 'Accepted').length;
+            const rejectedCount = history.filter(h => h.status === 'Rejected').length;
+            const reviewedCount = history.filter(h => h.status === 'Under Review').length;
 
             if (history.length === 0) {
                  return '' +
@@ -652,18 +691,24 @@
             return '' +
                 '<div class="space-y-8">' +
                     '<h2 class="text-3xl font-extrabold text-gray-800">Historical Application Summary</h2>' +
-                    '<div class="grid grid-cols-1 md:grid-cols-2 gap-6">' +
+                    '<div class="grid grid-cols-1 md:grid-cols-3 gap-6">' +
                          '<!-- Accepted Count -->' +
                         '<div class="bg-white p-6 rounded-2xl shadow-xl border-t-4 border-green-500">' +
-                            '<h3 class="text-base font-semibold text-gray-500 mb-2">Total Accepted Applications</h3>' +
+                            '<h3 class="text-base font-semibold text-gray-500 mb-2">Total Accepted</h3>' +
                             '<p class="text-5xl font-extrabold text-green-700">' + acceptedCount + '</p>' +
-                            '<p class="text-sm text-gray-600 mt-1">Includes conditional approvals</p>' +
+                            '<p class="text-sm text-gray-600 mt-1">Low Risk / Fast-Track</p>' +
+                        '</div>' +
+                        '<!-- Reviewed Count -->' +
+                        '<div class="bg-white p-6 rounded-2xl shadow-xl border-t-4 border-yellow-500">' +
+                            '<h3 class="text-base font-semibold text-gray-500 mb-2">Total Under Review</h3>' +
+                            '<p class="text-5xl font-extrabold text-yellow-700">' + reviewedCount + '</p>' +
+                            '<p class="text-sm text-gray-600 mt-1">Moderate Risk / Manual Review</p>' +
                         '</div>' +
                         '<!-- Rejected Count -->' +
                         '<div class="bg-white p-6 rounded-2xl shadow-xl border-t-4 border-red-500">' +
-                            '<h3 class="text-base font-semibold text-gray-500 mb-2">Total Rejected Applications</h3>' +
+                            '<h3 class="text-base font-semibold text-gray-500 mb-2">Total Rejected</h3>' +
                             '<p class="text-5xl font-extrabold text-red-700">' + rejectedCount + '</p>' +
-                            '<p class="text-sm text-gray-600 mt-1">High Risk applications</p>' +
+                            '<p class="text-sm text-gray-600 mt-1">High Risk / Escalation</p>' +
                         '</div>' +
                     '</div>' +
 
@@ -717,18 +762,34 @@
             if (pageName === 'ApplicationUpload') {
                 const fileSelectBtn = document.getElementById('file-select-btn');
                 const fileInput = document.getElementById('file-input');
+                const analyzeBatchBtn = document.getElementById('analyze-batch-btn');
                 
                 if (fileSelectBtn && fileInput) {
+                    // Clicking "Or Select File" triggers file dialog
                     fileSelectBtn.addEventListener('click', (e) => {
                         e.preventDefault();
                         fileInput.click();
                     });
 
+                    // File is selected, load it into memory (batchFileData)
                     fileInput.onchange = (e) => {
                         if (e.target.files.length > 0) {
-                            handleFileEvaluation(e.target.files[0]);
+                            handleFileSelection(e.target.files[0]);
                         }
                     };
+                }
+                
+                // Clicking "Analyze Batch" button triggers processing
+                if (analyzeBatchBtn) {
+                    analyzeBatchBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        if (batchFileData) {
+                            // Pass the button element to update its state during processing
+                            processBatch(batchFileData, analyzeBatchBtn);
+                        } else {
+                            showTemporaryMessage('Please select a file first.', 'red');
+                        }
+                    });
                 }
                 
                 // Form submission listener remains the same
@@ -803,8 +864,9 @@
                     currentRiskResult = result;
                     
                     // Determine final status
+                    // FIX 2: Amber is now 'Under Review'
                     const status = result.final_evaluation === 'Red' ? 'Rejected' : 
-                                   result.final_evaluation === 'Amber' ? 'Approved w/ conditions' : 'Accepted';
+                                   result.final_evaluation === 'Amber' ? 'Under Review' : 'Accepted';
                     
                     // Save result to history
                     applicationHistory.push({
@@ -826,7 +888,7 @@
         }
 
         function showTemporaryMessage(message, type) {
-            const color = type === 'green' ? 'bg-green-500 text-white' : 'bg-red-500 text-white';
+            const color = type === 'green' ? 'bg-green-500 text-white' : (type === 'blue' ? 'bg-indigo-500 text-white' : 'bg-red-500 text-white');
 
             const messageHtml = '' +
                 '<div id="temp-message" class="fixed top-20 right-10 z-50 p-4 rounded-lg shadow-xl ' + color + ' transition-opacity duration-300 transform translate-x-0" role="alert">' +
