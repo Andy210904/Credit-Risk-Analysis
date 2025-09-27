@@ -222,6 +222,127 @@
             };
         }
 
+        // Helper function for CSV parsing
+        function parseCSV(csvText) {
+            const lines = csvText.trim().split('\n');
+            if (lines.length < 2) return [];
+            
+            const headers = lines[0].split(',').map(h => h.trim());
+            const data = [];
+            
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',').map(v => v.trim());
+                if (values.length === headers.length) {
+                    let client = {};
+                    headers.forEach((header, index) => {
+                        let value = values[index];
+                        // Convert numeric fields based on expected keys
+                        if (!isNaN(parseFloat(value)) && essentialFields.includes(header)) {
+                             client[header] = parseFloat(value);
+                        } else {
+                            client[header] = value;
+                        }
+                    });
+                    data.push(client);
+                }
+            }
+            return data;
+        }
+
+        // Function to run mock evaluation on the entire batch
+        function processBatch(clientsData) {
+            if (clientsData.length === 0) {
+                showTemporaryMessage('Batch file contained no valid client data.', 'red');
+                return;
+            }
+
+            let firstResult = null;
+            let newApplications = 0;
+            
+            clientsData.forEach(clientInput => {
+                const result = evaluateRisk(clientInput);
+                
+                if (!firstResult) {
+                    firstResult = result; // Keep the first result for the single-client view
+                }
+                
+                // Determine final status
+                const status = result.final_evaluation === 'Red' ? 'Rejected' : 
+                               result.final_evaluation === 'Amber' ? 'Approved w/ conditions' : 'Accepted';
+                
+                // Save result to history
+                applicationHistory.push({
+                    id: result.applicant_id,
+                    date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+                    risk: result.final_evaluation,
+                    score: result.approval_prediction_pct,
+                    status: status,
+                    color: result.final_evaluation === 'Low' ? 'green' : result.final_evaluation === 'Amber' ? 'yellow' : 'red'
+                });
+                newApplications++;
+            });
+
+            // Update the single view (RiskEvaluation) with the first client's result
+            if (firstResult) {
+                currentRiskResult = firstResult;
+            }
+
+            showTemporaryMessage(`Batch analysis complete: ${newApplications} applications processed. Navigating to Reports.`, 'green');
+            
+            // Navigate to Reports to view the full batch log
+            renderPage('Reports');
+        }
+
+        // New function to handle file reading and evaluation
+        function handleFileEvaluation(file) {
+            if (!file) return;
+
+            const fileType = file.name.split('.').pop().toLowerCase();
+            const uploadBtn = document.getElementById('file-select-btn');
+
+            if (fileType !== 'csv' && fileType !== 'json') {
+                showTemporaryMessage('Unsupported file type. Please use CSV or JSON.', 'red');
+                return;
+            }
+
+            if (uploadBtn) {
+                uploadBtn.disabled = true;
+                uploadBtn.textContent = 'Parsing & Analyzing...';
+            }
+            // Add a slight delay for better UX with the message
+            setTimeout(() => { showTemporaryMessage('Starting batch analysis for ' + file.name + '...', 'green'); }, 100);
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                let clientsData = [];
+                try {
+                    const contents = e.target.result;
+                    if (fileType === 'json') {
+                        clientsData = JSON.parse(contents);
+                        if (!Array.isArray(clientsData)) clientsData = [clientsData]; // Handle single JSON object
+                    } else if (fileType === 'csv') {
+                        clientsData = parseCSV(contents);
+                    }
+                } catch (error) {
+                    showTemporaryMessage('Error parsing ' + fileType.toUpperCase() + ' file.', 'red');
+                    if (uploadBtn) {
+                        uploadBtn.disabled = false;
+                        uploadBtn.textContent = 'Or Click to Select File';
+                    }
+                    return;
+                }
+                
+                // Simulate API call processing time
+                setTimeout(() => {
+                    processBatch(clientsData);
+                    
+                    if (uploadBtn) {
+                        // Reset button text only if we stay on this page, but we navigate away, so no need to reset here.
+                    }
+                }, 1500);
+            };
+            reader.readAsText(file);
+        }
 
         // --- Page Render Functions ---
 
@@ -572,6 +693,7 @@
         
         // Helper function to attach event listeners dynamically
         function setupDynamicListeners(pageName) {
+            // Re-attach listeners for common buttons
             if (pageName === 'RiskEvaluation' && !currentRiskResult) {
                 const startBtn = document.getElementById('start-new-evaluation-btn');
                 if (startBtn) {
@@ -590,13 +712,29 @@
                     });
                 }
             }
+
+            // --- BATCH PROCESSING LISTENERS ---
             if (pageName === 'ApplicationUpload') {
                 const fileSelectBtn = document.getElementById('file-select-btn');
-                if (fileSelectBtn) {
+                const fileInput = document.getElementById('file-input');
+                
+                if (fileSelectBtn && fileInput) {
                     fileSelectBtn.addEventListener('click', (e) => {
                         e.preventDefault();
-                        document.getElementById('file-input').click();
+                        fileInput.click();
                     });
+
+                    fileInput.onchange = (e) => {
+                        if (e.target.files.length > 0) {
+                            handleFileEvaluation(e.target.files[0]);
+                        }
+                    };
+                }
+                
+                // Form submission listener remains the same
+                const form = document.getElementById('risk-evaluation-form');
+                if (form) {
+                    form.onsubmit = handleFormSubmission;
                 }
             }
         }
@@ -642,11 +780,6 @@
             
             // Re-attach listeners after rendering dynamic content
             setupDynamicListeners(pageName);
-            
-            // Mock file upload listener for interaction feedback
-            const fileInput = document.getElementById('file-input');
-            if(fileInput) fileInput.onchange = (e) => showTemporaryMessage('File ' + e.target.files[0].name + ' uploaded. Batch processing mocked.', 'green');
-
         }
 
         function handleFormSubmission(event) {
