@@ -130,6 +130,8 @@
         };
 
         const FIELD_LABELS = {
+            "entity_id": "Entity ID",
+            "entity_name": "Entity Name",
             "ebitda_margin_pct": "EBITDA Margin (%)", "ebit_margin_pct": "EBIT Margin (%)",
             "debt_to_equity": "Debt to Equity Ratio", "interest_coverage": "Interest Coverage",
             "dscr": "DSCR (Debt Service Coverage Ratio)", "current_ratio": "Current Ratio",
@@ -147,6 +149,11 @@
             "ebitda_margin_pct", "revenue_usd_m", "years_in_operation",
             "governance_score_0_100", "country_risk_0_100", "collateral_coverage_pct", 
             "payment_incidents_12m"
+        ];
+        
+        // Fields to display in the batch preview table
+        const previewFields = [
+            "entity_id", "entity_name", ...essentialFields
         ];
 
 
@@ -218,7 +225,7 @@
                 summary: summary,
                 final_evaluation: FINAL_EVALUATION,
                 approval_prediction_pct: approvalPredictionPct,
-                applicant_id: 'CUS-' + (Math.floor(Math.random() * 90000) + 10000),
+                applicant_id: inputData.entity_id || ('CUS-' + (Math.floor(Math.random() * 90000) + 10000)),
                 input_data: inputData // Pass original input for display
             };
         }
@@ -250,62 +257,35 @@
             return data;
         }
 
-        // Function to run mock evaluation on the entire batch
-        function processBatch(clientsData, uploadBtn) {
-            if (clientsData.length === 0) {
-                showTemporaryMessage('Batch file contained no valid client data.', 'red');
-                if (uploadBtn) {
-                    uploadBtn.disabled = false;
-                    uploadBtn.textContent = 'Analyze Batch (0 Clients)';
-                }
-                return;
-            }
-
-            let firstResult = null;
-            let newApplications = 0;
+        // --- NEW: Individual Evaluation Handler ---
+        function handleIndividualEvaluation(clientData) {
+            // Simulate processing latency
+            showTemporaryMessage('Analyzing individual client...', 'blue');
             
-            // Disable the button and show processing status
-            if (uploadBtn) {
-                uploadBtn.disabled = true;
-                uploadBtn.innerHTML = '<svg class="animate-spin w-5 h-5 mr-2 text-white" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-dasharray="80" stroke-dashoffset="60" style="stroke-opacity: 0.25;"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Analyzing ' + clientsData.length + ' Clients...';
-            }
-
             setTimeout(() => {
-                clientsData.forEach(clientInput => {
-                    const result = evaluateRisk(clientInput);
-                    
-                    if (!firstResult) {
-                        firstResult = result; // Keep the first result for the single-client view
-                    }
-                    
-                    // Determine final status
-                    // FIX 2: Amber is now 'Under Review'
-                    const status = result.final_evaluation === 'Red' ? 'Rejected' : 
-                                   result.final_evaluation === 'Amber' ? 'Under Review' : 'Accepted';
-                    
-                    // Save result to history
-                    applicationHistory.push({
-                        id: result.applicant_id,
-                        date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
-                        risk: result.final_evaluation,
-                        score: result.approval_prediction_pct,
-                        status: status,
-                        color: result.final_evaluation === 'Low' ? 'green' : result.final_evaluation === 'Amber' ? 'yellow' : 'red'
-                    });
-                    newApplications++;
+                const result = evaluateRisk(clientData);
+                currentRiskResult = result;
+                
+                // Determine final status
+                const status = result.final_evaluation === 'Red' ? 'Rejected' : 
+                               result.final_evaluation === 'Amber' ? 'Under Review' : 'Accepted';
+                
+                // Save result to history
+                applicationHistory.push({
+                    id: result.applicant_id,
+                    date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+                    risk: result.final_evaluation,
+                    score: result.approval_prediction_pct,
+                    status: status,
+                    color: result.final_evaluation === 'Low' ? 'green' : result.final_evaluation === 'Amber' ? 'yellow' : 'red'
                 });
 
-                // Update the single view (RiskEvaluation) with the first client's result
-                if (firstResult) {
-                    currentRiskResult = firstResult;
-                }
-
-                showTemporaryMessage(`Batch analysis complete: ${newApplications} applications processed. Navigating to Reports.`, 'green');
+                showTemporaryMessage('Evaluation Complete! See the Risk Evaluation page.', 'green');
                 
-                // Navigate to Reports to view the full batch log
-                renderPage('Reports');
+                // Navigate to RiskEvaluation page for the result
+                renderPage('RiskEvaluation');
 
-            }, 2500); // Simulate API latency
+            }, 1000); 
         }
 
         // New function to handle file reading and storage
@@ -338,19 +318,25 @@
                     }
                     
                     batchFileData = clientsData;
-                    if (fileNameDisplay) fileNameDisplay.textContent = `${file.name} (${clientsData.length} clients)`;
+                    // Store the filename for display in the preview
+                    batchFileData.file = file.name;
+
+                    if (fileNameDisplay) fileNameDisplay.textContent = `${file.name} (${clientsData.length} clients loaded)`;
                     if (uploadBtn) {
                         uploadBtn.disabled = clientsData.length === 0;
-                        uploadBtn.textContent = `Analyze Batch (${clientsData.length} Clients)`;
+                        uploadBtn.textContent = `Show Data Preview (${clientsData.length} Clients)`;
                     }
-                    showTemporaryMessage(`File loaded: ${clientsData.length} applications ready for analysis.`, 'blue');
+                    showTemporaryMessage(`File loaded: ${clientsData.length} applications ready for preview.`, 'blue');
+                    
+                    // Re-render the application upload page to show the new preview table
+                    renderPage('ApplicationUpload');
 
                 } catch (error) {
                     batchFileData = null;
                     if (fileNameDisplay) fileNameDisplay.textContent = 'Error during file parsing.';
                     if (uploadBtn) {
                         uploadBtn.disabled = true;
-                        uploadBtn.textContent = 'Analyze Batch (0 Clients)';
+                        uploadBtn.textContent = 'Show Data Preview (0 Clients)';
                     }
                     showTemporaryMessage('Error parsing ' + fileType.toUpperCase() + ' file.', 'red');
                 }
@@ -461,23 +447,74 @@
             }).join('');
 
             // Determine initial state of analyze button
-            const initialAnalyzeBtnText = batchFileData ? `Analyze Batch (${batchFileData.length} Clients)` : 'Analyze Batch (0 Clients)';
+            const initialAnalyzeBtnText = batchFileData ? `Show Data Preview (${batchFileData.length} Clients)` : 'Show Data Preview (0 Clients)';
             const isAnalyzeDisabled = !batchFileData || batchFileData.length === 0;
+
+            // --- BATCH DATA PREVIEW GENERATION ---
+            let batchPreviewHtml = '';
+            if (batchFileData && batchFileData.length > 0) {
+                // Get all essential field labels for the table header
+                const tableHeaders = previewFields.map(key => 
+                    '<th class="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[100px]">' + (FIELD_LABELS[key] || key) + '</th>'
+                ).join('');
+
+                // Generate table rows for ALL clients in the batch (not just first 5 for the new use case)
+                const tableRows = batchFileData.map((client, index) => {
+                    // Collect all essential data points
+                    const clientDataCells = previewFields.map(key => 
+                        '<td class="p-3 whitespace-nowrap text-sm text-gray-600">' + (client[key] !== undefined ? client[key] : 'N/A') + '</td>'
+                    ).join('');
+                    
+                    // Create a sanitized JSON string of the client data for the inline evaluation call
+                    const clientDataJson = JSON.stringify(client).replace(/"/g, '&quot;');
+
+
+                    return '<tr class="border-b border-gray-100 hover:bg-gray-50">' + 
+                           clientDataCells + 
+                           // New Action Column with Evaluate Button
+                           '<td class="p-3 whitespace-nowrap">' +
+                               '<button onclick="handleIndividualEvaluation(' + clientDataJson + ')" class="bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-semibold py-1 px-3 rounded-full shadow-md transition duration-150">' +
+                                   'Evaluate' +
+                               '</button>' +
+                           '</td>' +
+                           '</tr>';
+                }).join('');
+
+                batchPreviewHtml = '' +
+                    '<div id="batch-data-preview-table" class="lg:col-span-3 bg-white p-8 rounded-2xl shadow-xl border-t-4 border-indigo-200 mt-8">' +
+                        '<h2 class="text-xl font-bold text-gray-800 mb-4">Batch Data Preview (' + batchFileData.file + ')</h2>' +
+                        '<p class="text-sm text-gray-500 mb-4">Click "Evaluate" for an individual client to run the risk engine.</p>' +
+                        '<div class="overflow-x-auto max-h-[500px] relative border border-gray-200 rounded-lg">' +
+                            '<table class="min-w-full divide-y divide-gray-200">' +
+                                '<thead class="bg-gray-50 sticky top-0">' +
+                                    '<tr>' +
+                                        tableHeaders +
+                                        '<th class="p-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[80px]">Action</th>' +
+                                    '</tr>' +
+                                '</thead>' +
+                                '<tbody class="divide-y divide-gray-100">' +
+                                    tableRows +
+                                '</tbody>' +
+                            '</table>' +
+                        '</div>' +
+                    '</div>';
+            }
+            // --- END BATCH DATA PREVIEW GENERATION ---
 
 
             return '' +
                 '<div class="space-y-8">' +
                     '<h2 class="text-3xl font-extrabold text-gray-800">New Application Submission (Data Input)</h2>' +
                     '<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">' +
-                        '<!-- Upload/CSV Card -->' +
+                        '<!-- Upload/CSV Card (Col 1) -->' +
                         '<div class="lg:col-span-1 bg-white p-8 rounded-2xl shadow-xl flex flex-col justify-between">' +
                             '<h2 class="text-xl font-bold text-gray-800 mb-4">Batch Upload (.csv or .json)</h2>' +
                             '<div id="drop-area" class="border-2 border-dashed border-indigo-300 bg-indigo-50 rounded-xl p-8 text-center transition duration-200 hover:border-indigo-500 cursor-pointer">' +
                                 '<svg class="w-10 h-10 mx-auto text-indigo-500 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5.002 5.002 0 0113.974 4C14.048 4.046 14.12 4 14.2 4a5 5 0 014.59 7.424m-8.563 4.34a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L10 14.586l7.293-7.293a1 1 0 011.414 1.414l-8 8a1 1 0 01-1.414 0z"></path></svg>' +
-                                '<p id="file-name-display" class="text-gray-600 font-medium">' + (batchFileData ? batchFileData[0].file : 'Drag & drop files here') + '</p>' +
+                                '<p id="file-name-display" class="text-gray-600 font-medium">' + (batchFileData ? batchFileData.file : 'Drag & drop files here') + '</p>' +
                                 '<input type="file" id="file-input" class="hidden" accept=".csv, .json">' +
                             '</div>' +
-                            // FIX 3: Button now explicitly triggers analysis (if file is loaded)
+                            // Button now triggers preview re-render
                             '<button id="analyze-batch-btn" ' + (isAnalyzeDisabled ? 'disabled' : '') + ' class="mt-6 w-full bg-indigo-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition duration-150 shadow-lg disabled:bg-indigo-300">' +
                                 initialAnalyzeBtnText +
                             '</button>' +
@@ -485,9 +522,15 @@
                                 'Or Select File' +
                             '</button>' +
                         '</div>' +
+                        
+                        // Inject the data preview table here (Col 2 & 3 - spans 2 columns)
+                        (batchFileData ? batchPreviewHtml.replace('lg:col-span-3', 'lg:col-span-2') : '') +
 
-                        '<!-- Manual Form Card -->' +
-                        '<div class="lg:col-span-2 bg-white p-8 rounded-2xl shadow-xl">' +
+                    '</div>' +
+                    
+                    // Manual Form Card now takes up the remaining space if no file is loaded, or is placed below the file upload area if the preview is active.
+                    '<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">' +
+                        '<div class="lg:col-span-3 bg-white p-8 rounded-2xl shadow-xl">' +
                             '<h2 class="text-xl font-bold text-gray-800 mb-6">Manual Credit Application Input (10 Key Factors)</h2>' +
                             '<form id="risk-evaluation-form" onsubmit="handleFormSubmission(event)" class="space-y-6">' +
                                 '<div class="grid grid-cols-1 md:grid-cols-2 gap-6">' +
@@ -724,7 +767,7 @@
                                     '<th class="p-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Final Status</th>' +
                                 '</tr>' +
                             '</thead>' +
-                            '<tbody class="divide-y divide-gray-200">' +
+                            '<tbody class="divide-y divide-gray-100">' +
                                 historyRows +
                             '</tbody>' +
                         '</table>' +
@@ -785,7 +828,8 @@
                         e.preventDefault();
                         if (batchFileData) {
                             // Pass the button element to update its state during processing
-                            processBatch(batchFileData, analyzeBatchBtn);
+                            // NOTE: analyzeBatchBtn now triggers the PREVIEW, not the evaluation
+                            renderPage('ApplicationUpload');
                         } else {
                             showTemporaryMessage('Please select a file first.', 'red');
                         }
