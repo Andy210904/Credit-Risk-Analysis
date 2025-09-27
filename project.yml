@@ -1,0 +1,35 @@
+# Project Configuration
+project_name: "credit-risk-analysis"
+description: "Full-stack credit risk analysis platform with ML and LLM integration"
+
+# Services Configuration
+services:
+  frontend:
+    framework: "react"
+    port: 3000
+    build_command: "npm run build"
+    start_command: "npm start"
+    
+  backend:
+    framework: "fastapi"
+    port: 8000
+    build_command: "pip install -r requirements.txt"
+    start_command: "uvicorn main:app --host 0.0.0.0 --port 8000"
+    
+  ml_service:
+    framework: "fastapi"
+    port: 8001
+    build_command: "pip install -r requirements.txt"
+    start_command: "python main.py"
+
+# Development Configuration
+development:
+  database_url: "sqlite:///./credit_risk.db"
+  debug: true
+  cors_origins: ["http://localhost:3000"]
+
+# Production Configuration (example)
+production:
+  database_url: "postgresql://user:password@localhost/credit_risk_db"
+  debug: false
+  cors_origins: ["https://your-domain.com"]
